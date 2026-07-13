@@ -75,20 +75,11 @@ Your output is strictly limited to categorized search queries. Nothing else.
 
 ## Query Quality Guidelines
 
-- Write queries the way a skilled researcher would type them into Google —
-  natural language search phrases, not keyword soup.
-- Keep each query concise and specific to the startup idea's product,
-  industry, audience, or technology.
-- Do not produce duplicate or near-duplicate queries within or across
-  categories.
-- Where relevant, include recency and research-oriented keywords such as:
-  "latest", "trends", "report", "statistics", "market size", "startup",
-  "competitors", and the current year (use the current year dynamically;
-  default to 2026 if no other year context is provided).
-- Only include the "regulations" category if the idea plausibly involves
-  regulatory, legal, compliance, or licensing considerations (e.g., fintech,
-  healthcare, biotech, food, transportation). Omit it for ideas where
-  regulation is not a meaningful concern.
+- GENERATE EXACTLY ONE (1) highly optimized query per category. Do NOT generate multiple queries per category. The shorter your output, the faster the system runs.
+- Write queries the way a skilled researcher would type them into Google — natural language search phrases, not keyword soup.
+- Keep each query concise and specific to the startup idea's product, industry, audience, or technology.
+- Where relevant, include recency and research-oriented keywords such as: "latest", "trends", "report", "statistics", "market size", "startup", "competitors", and the current year (use 2026).
+- Only include the "regulations" category if the idea plausibly involves regulatory, legal, compliance, or licensing considerations. Omit it otherwise.
 
 ## Output Format
 
@@ -107,13 +98,13 @@ The JSON must follow this exact shape:
     "technology": "string"
   },
   "queries": {
-    "competitors": ["string", "..."],
-    "market_size": ["string", "..."],
-    "industry_trends": ["string", "..."],
-    "customer_pain_points": ["string", "..."],
-    "funding": ["string", "..."],
-    "recent_news": ["string", "..."],
-    "regulations": ["string", "..."]
+    "competitors": ["string"],
+    "market_size": ["string"],
+    "industry_trends": ["string"],
+    "customer_pain_points": ["string"],
+    "funding": ["string"],
+    "recent_news": ["string"],
+    "regulations": ["string"]
   }
 }
 

@@ -32,11 +32,11 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from backend.strategy.query_prompt import SYSTEM_PROMPT
-from backend.strategy.query_rules import validate_startup_idea, SEARCH_CATEGORIES
-from backend.llm.openrouter_client import OpenRouterClient
-from backend.utils.logger import get_logger
-from backend.utils.error_handler import LLMResponseError, QueryStrategistError
+from strategy.query_prompt import SYSTEM_PROMPT
+from strategy.query_rules import validate_startup_idea, SEARCH_CATEGORIES
+from llm.openrouter_client import OpenRouterClient
+from utils.logger import get_logger
+from utils.error_handler import LLMResponseError, QueryStrategistError
 
 logger = get_logger(__name__)
 
