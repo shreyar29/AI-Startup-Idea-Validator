@@ -120,7 +120,7 @@ class QueryStrategist:
                 self._validate_response_structure(parsed_response)
 
                 logger.info("Queries generated successfully. Returning response.")
-                return parsed_response
+                return parsed_response 
 
             except LLMResponseError as exc:
                 logger.warning("Failed to parse or validate JSON on attempt %d: %s", attempt, exc)

@@ -1,10 +1,10 @@
-# Requirements Overview — Milestone 1 (Completed)
+# Requirements Overview — Initial Implementation
 
-This document describes what was built and the status of each requirement for **Milestone 1: Web Search Agent**.
+This document describes what was built and the status of each requirement for the **Web Search Agent**.
 
 ---
 
-## Milestone 1 Goal
+## Initial Implementation Goal
 
 Build a working **Web Search Agent** that:
 1. Accepts a startup idea as natural language input
@@ -42,13 +42,13 @@ Build a working **Web Search Agent** that:
 
 ---
 
-## Milestone 1 Completion: 100%
+## Core Implementation Completion: 100%
 
 All modules are implemented, integrated, and tested with live API keys.
 
 ---
 
-## Milestone 2 — Planned (Not Yet Built)
+## Future Enhancements — Planned
 
 | Feature | Description |
 |---------|-------------|
