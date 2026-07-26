@@ -5,6 +5,7 @@ Purpose
 -------
 Milestone 2 - Comparison Agent
 
+
 Responsibilities
 ----------------
 - Reads Market, Customer and Competitor analyses from Shared Context.
@@ -47,25 +48,35 @@ class ComparisonAgent:
         idea = self.context.get("idea", {})
 
         if not (market or customer or competitor):
+            logger.error("Shared Context is empty.")
             raise ComparisonAnalysisError(
                 "No analysis data found in Shared Context."
             )
 
+        logger.info(
+            "Loaded Shared Context successfully. "
+            "Market=%s, Customer=%s, Competitor=%s",
+            bool(market),
+            bool(customer),
+            bool(competitor),
+        )
+             
+        logger.info("Generating feature comparison matrix.")
         feature_matrix = self._generate_feature_matrix(
             idea,
             competitor
         )
-
+        logger.info("Identifying competitive advantages.")
         competitive_advantages = self._identify_competitive_advantages(
             market,
             competitor
         )
-
+        logger.info("Identifying market gaps.")
         market_gaps = self._identify_market_gaps(
             market,
             competitor
         )
-
+        logger.info("Generating SWOT analysis.")
         swot = self._generate_swot(
             market,
             customer,
@@ -73,13 +84,13 @@ class ComparisonAgent:
             competitive_advantages,
             market_gaps
         )
-
+        logger.info("Calculating validation score.")
         validation_score = self._calculate_validation_score(
             market,
             customer,
             competitor
         )
-
+        logger.info("Calculating innovation score.")
         innovation_score = self._calculate_innovation_score(
             competitive_advantages,
             market_gaps
@@ -90,7 +101,7 @@ class ComparisonAgent:
             customer,
             competitor
         )
-
+        logger.info("Generating recommendations.")
         recommendations = self._generate_recommendations(
             market,
             customer,
@@ -120,10 +131,16 @@ class ComparisonAgent:
                 timezone.utc
             ).isoformat()
         }
-
+        logger.info("Writing results to Shared Context.")
         self.context["comparison_analysis"] = analysis
 
-        logger.info("Comparison analysis completed.")
+        logger.info(
+    "Comparison Agent completed successfully. "
+    "Validation=%d | Innovation=%d | Confidence=%s",
+    validation_score,
+    innovation_score,
+    confidence,
+)
 
         return analysis
 
