@@ -211,50 +211,73 @@ class OpenRouterClient:
         payload: dict[str, Any],
     ) -> dict[str, Any]:
         """
-        Perform the actual HTTP call to OpenRouter and return the parsed
-        JSON body on success. All failure modes are translated into the
-        module's custom exception types.
+        Perform the actual HTTP call to OpenRouter with automatic exponential backoff 
+        for 429 Rate Limit errors and network timeouts.
         """
         url = f"{self._base_url.rstrip('/')}/chat/completions"
+        import asyncio
+        import random
 
-        try:
-            async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-                response = await client.post(url, headers=headers, json=payload)
-        except httpx.TimeoutException as exc:
-            logger.error("Timeout occurred while calling OpenRouter.")
-            raise OpenRouterTimeoutError(
-                "Request to OpenRouter timed out."
-            ) from exc
-        except httpx.RequestError as exc:
-            logger.error("Network error while calling OpenRouter: %s", exc)
-            raise OpenRouterNetworkError(
-                "A network error occurred while contacting OpenRouter."
-            ) from exc
+        max_retries = 3
+        base_backoff = 2.0
 
-        if response.status_code == 401:
-            logger.error("Invalid API Key rejected by OpenRouter.")
-            raise OpenRouterAuthError(
-                "OpenRouter rejected the request due to an invalid API key."
-            )
+        for attempt in range(max_retries + 1):
+            try:
+                async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
+                    response = await client.post(url, headers=headers, json=payload)
+            except httpx.TimeoutException as exc:
+                if attempt == max_retries:
+                    logger.error("Timeout occurred while calling OpenRouter.")
+                    raise OpenRouterTimeoutError(
+                        "Request to OpenRouter timed out."
+                    ) from exc
+                sleep_time = base_backoff * (2 ** attempt) + random.uniform(0, 1)
+                logger.warning(f"OpenRouter Timeout on attempt {attempt+1}. Retrying in {sleep_time:.1f}s...")
+                await asyncio.sleep(sleep_time)
+                continue
+            except httpx.RequestError as exc:
+                if attempt == max_retries:
+                    logger.error("Network error while calling OpenRouter: %s", exc)
+                    raise OpenRouterNetworkError(
+                        "A network error occurred while contacting OpenRouter."
+                    ) from exc
+                sleep_time = base_backoff * (2 ** attempt) + random.uniform(0, 1)
+                logger.warning(f"OpenRouter Network error on attempt {attempt+1}. Retrying in {sleep_time:.1f}s...")
+                await asyncio.sleep(sleep_time)
+                continue
 
-        if response.status_code >= 400:
-            logger.error(
-                "API request failed with status %s: %s",
-                response.status_code,
-                response.text,
-            )
-            raise OpenRouterAPIError(
-                f"OpenRouter API request failed with status "
-                f"{response.status_code}."
-            )
+            if response.status_code == 401:
+                logger.error("Invalid API Key rejected by OpenRouter.")
+                raise OpenRouterAuthError(
+                    "OpenRouter rejected the request due to an invalid API key."
+                )
 
-        try:
-            return response.json()
-        except ValueError as exc:
-            logger.error("Failed to decode JSON from OpenRouter response.")
-            raise OpenRouterResponseError(
-                "OpenRouter response body was not valid JSON."
-            ) from exc
+            if response.status_code == 429:
+                if attempt == max_retries:
+                    logger.error(f"Rate limit (429) exhausted after {max_retries} retries.")
+                    raise OpenRouterAPIError(f"OpenRouter API request failed with status {response.status_code}.")
+                sleep_time = base_backoff * (2 ** attempt) + random.uniform(1, 3)
+                logger.warning(f"HTTP 429 Rate Limit on attempt {attempt+1}. Retrying in {sleep_time:.1f}s...")
+                await asyncio.sleep(sleep_time)
+                continue
+
+            if response.status_code >= 400:
+                logger.error(
+                    "API request failed with status %s: %s",
+                    response.status_code,
+                    response.text,
+                )
+                raise OpenRouterAPIError(
+                    f"OpenRouter API request failed with status {response.status_code}."
+                )
+
+            try:
+                return response.json()
+            except ValueError as exc:
+                logger.error("Failed to decode JSON from OpenRouter response.")
+                raise OpenRouterResponseError(
+                    "OpenRouter response body was not valid JSON."
+                ) from exc
 
     def _parse_response(self, raw_response: dict[str, Any]) -> str:
         """

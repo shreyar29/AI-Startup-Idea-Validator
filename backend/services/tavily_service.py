@@ -51,15 +51,26 @@ class TavilySearchService:
     async def search(self, queries: list[str]) -> list[dict]:
         import asyncio
         import httpx
+        import logging
+        logger = logging.getLogger(__name__)
+        
         if not queries:
             return []
             
+        logger.info(f"TavilySearchService: Executing {len(queries)} live web searches.")
+        
         async with httpx.AsyncClient(timeout=15.0) as client:
             tasks = [self._safe_search(client, q) for q in queries]
             results_list = await asyncio.gather(*tasks)
             
             flat_results = []
-            for res in results_list:
+            for i, res in enumerate(results_list):
+                query_name = queries[i]
                 if res:
+                    logger.info(f"TavilySearchService: Query '{query_name}' retrieved {len(res)} valid results.")
                     flat_results.extend(res)
+                else:
+                    logger.warning(f"TavilySearchService: Query '{query_name}' yielded no results or failed.")
+                    
+            logger.info(f"TavilySearchService: Live search batch complete. Total raw results: {len(flat_results)}.")
             return flat_results

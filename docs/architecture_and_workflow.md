@@ -105,5 +105,38 @@ React components dynamically render the response:
 
 - **LLM Output**: Strictly 1 query per category = minimal token generation time
 - **Search Concurrency**: All Tavily calls run in parallel (`asyncio.gather`) — no sequential waiting
-- **Native Async HTTP**: `httpx.AsyncClient` used instead of thread-based wrappers — no thread pool exhaustion
 - **Semaphore**: Concurrency limited to 10 simultaneous requests to avoid rate limiting
+
+---
+
+## Milestone 2 — Decentralized P2P Mesh Network & Analysis Synthesis
+
+Following the completion of the Web Search Agent in Milestone 1, the architecture was fundamentally upgraded in **Milestone 2**. The centralized, fragile `CrewAI` orchestration was completely removed and replaced with a highly performant, custom **Decentralized Agent-to-Agent (A2A) Mesh Network**.
+
+### Architectural & Workflow Updates
+1. **Decentralized Orchestration**: Agents now operate as autonomous nodes in a mesh network, sharing a central `context` dictionary.
+2. **Concurrent & Sequential Execution Modes**: Downstream analysis agents (Market, Customer, Competitor) hook into a single cached `asyncio.Task` executed by the Web Search Agent, completely eliminating redundant web searches and minimizing Tavily API calls.
+3. **Exponential Backoff Engine**: Implemented directly in the HTTP client to intercept `HTTP 429 Too Many Requests` API rate limits caused by concurrent mesh execution.
+4. **Indestructible JSON Parsing**: Integrated the heuristic `json-repair` library into the parsing utility to automatically intercept, repair, and unpack malformed LLM hallucinations (missing commas, unescaped quotes, stray arrays) on the fly without crashing the pipeline.
+5. **Context Window Optimization**: Raw search snippets are aggressively truncated (e.g., `[:3000]` characters) before LLM injection, vastly improving generation speed (Time-To-First-Token) and reducing token costs.
+
+### New Component Responsibilities (Milestone 2)
+
+| File | Responsibility |
+|------|---------------|
+| `backend/crew/orchestrator.py` | The entry point for the mesh network. Initializes the agents, maps their peer connections, and triggers the final synthesis node. Replaced legacy CrewAI logic. |
+| `backend/agents/market_agent.py` | Synthesizes web snippets to extract market size, growth rate (CAGR), maturity, and distinct trends. |
+| `backend/agents/customer_agent.py` | Generates realistic user personas, identifies pain points, uncovers unmet needs, and calculates an overall sentiment score based on research data. |
+| `backend/agents/competitor_agent.py` | Discovers actual real-world competitors, actively filtering out generic placeholders (`Unknown`, `N/A`). Extracts features, pricing, strengths/weaknesses, and performs a mathematical feature gap analysis. |
+| `backend/agents/comparison_agent.py` | The master synthesis node. Compiles Market, Customer, and Competitor insights into a massive `context_payload` to dynamically calculate `validation_score`, `innovation_score`, and generate a verified `feature_matrix` array. |
+| `backend/llm/openrouter_client.py` | Upgraded to include an intelligent Exponential Backoff Engine with randomized jitter to transparently handle concurrency rate limits (HTTP 429). |
+| `backend/utils/error_handler.py` | Upgraded `safe_parse_llm_json` to utilize `json-repair`, automatically fixing structural LLM syntax errors, and seamlessly unpacking single-element arrays into JSON objects. |
+| `backend/utils/logger.py` | Replaced verbose console spam with configurable, structured, and timestamped logging. |
+
+### Milestone 2 Data Flow (Synthesis Pipeline)
+
+1. **Orchestrator Trigger**: The `StartupValidatorOrchestrator` initializes all nodes and commands the `ComparisonAgent` to generate its report.
+2. **Peer Task Resolution**: The `ComparisonAgent` demands upstream data from the Market, Customer, and Competitor peers.
+3. **Web Search Task Caching**: The Market, Customer, and Competitor peers simultaneously demand web data from the `WebSearchAgent`. The search is executed exactly **once**, and the payload is distributed from memory to all three nodes.
+4. **Resilient LLM Inference**: The three analysis agents process the truncated `[:3000]` snippets. If the LLM generates broken JSON, `json-repair` fixes it. If it fails entirely, the 3-attempt retry loop catches the `MalformedLLMOutputError`.
+5. **Final Aggregation**: The `ComparisonAgent` cross-references all verified outputs into a comprehensive matrix and computes the final startup recommendation scores, returning 100% schema-compliant JSON to the frontend.

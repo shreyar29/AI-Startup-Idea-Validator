@@ -203,6 +203,7 @@ def safe_parse_llm_json(raw_text, required_keys=None):
     to a default/partial structure instead of crashing.
     """
     import json
+    import json_repair
 
     cleaned = raw_text.strip()
     if cleaned.startswith("```"):
@@ -214,7 +215,24 @@ def safe_parse_llm_json(raw_text, required_keys=None):
     try:
         parsed = json.loads(cleaned)
     except (json.JSONDecodeError, TypeError) as exc:
-        raise MalformedLLMOutputError(f"Could not parse LLM output as JSON: {exc}")
+        logger.warning(f"Standard JSON decode failed: {exc}. Attempting automatic repair.")
+        try:
+            # Fallback to the json-repair library which handles missing commas, unescaped quotes, etc.
+            repaired_str = json_repair.repair_json(cleaned)
+            parsed = json.loads(repaired_str)
+            logger.info("Automatic JSON repair succeeded.")
+        except Exception as repair_exc:
+            raise MalformedLLMOutputError(f"Could not parse or repair LLM output as JSON: {exc} | Repair error: {repair_exc}")
+
+    if isinstance(parsed, list):
+        if len(parsed) == 1 and isinstance(parsed[0], dict):
+            logger.info("Unpacked single-element JSON array into a JSON object.")
+            parsed = parsed[0]
+        else:
+            raise MalformedLLMOutputError("LLM output is a JSON array, but a JSON object was expected.")
+            
+    if not isinstance(parsed, dict):
+        raise MalformedLLMOutputError(f"LLM output must be a JSON object, got {type(parsed).__name__}")
 
     if required_keys:
         missing = [key for key in required_keys if key not in parsed]
