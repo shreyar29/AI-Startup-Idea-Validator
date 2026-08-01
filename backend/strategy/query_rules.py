@@ -35,6 +35,7 @@ SEARCH_CATEGORIES: tuple[str, ...] = (
     "customer_pain_points",
     "funding",
     "recent_news",
+    "related_articles",
 )
 
 # Categories that are conditionally included based on the startup's

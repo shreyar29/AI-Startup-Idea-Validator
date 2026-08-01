@@ -22,3 +22,6 @@ python-dotenv>=1.0.0
 
 # JSON Parsing & Repair (Milestone 2)
 json-repair>=0.30.0
+
+# Logging
+rich>=13.7.0

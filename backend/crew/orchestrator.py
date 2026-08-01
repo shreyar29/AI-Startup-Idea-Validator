@@ -14,6 +14,8 @@ import logging
 import asyncio
 from typing import Any, Dict
 
+from guardrails.manager import GuardrailManager
+
 # Business Agents
 from strategy.query_strategist import QueryStrategist
 from agents.web_search_agent import WebSearchAgent
@@ -86,23 +88,47 @@ class StartupValidatorOrchestrator:
             # which in turn will concurrently pull from the WebSearch node!
             logger.info("Requesting final analysis from the Comparison Node...")
             await comparison_node.get_analysis()
+            
+            web_search_data = await web_search_node.get_analysis()
 
             exec_time = time.time() - start_time
             logger.info(f"P2P Mesh Network completed successfully in {exec_time:.2f} seconds.")
 
             logger.info("Aggregating final response payloads.")
-            return {
+            
+            # Apply (4) Agent Output Guardrails and (5) Fact & Hallucination Guardrails
+            market_data = GuardrailManager.validate_agent_output(
+                "Market Agent", shared_context.get("market_analysis", {}), ["market_size", "growth_rate", "market_trends"]
+            )
+            competitor_data = GuardrailManager.validate_agent_output(
+                "Competitor Agent", shared_context.get("competitor_analysis", {}), ["competitors"]
+            )
+            customer_data = GuardrailManager.validate_agent_output(
+                "Customer Agent", shared_context.get("customer_analysis", {}), ["target_segments", "pain_points"]
+            )
+            comparison_data = GuardrailManager.validate_agent_output(
+                "Comparison Agent", shared_context.get("comparison_analysis", {}), ["feature_comparison"]
+            )
+            
+            market_data = GuardrailManager.verify_facts_and_hallucinations("Market Agent", market_data, web_search_data)
+            competitor_data = GuardrailManager.verify_facts_and_hallucinations("Competitor Agent", competitor_data, web_search_data)
+
+            raw_response = {
                 "metadata": {
                     "startup_idea": startup_idea,
                     "execution_time_seconds": round(exec_time, 2),
                     "status": "success"
                 },
-                "market_agent": shared_context.get("market_analysis", {}),
-                "competitor_agent": shared_context.get("competitor_analysis", {}),
-                "customer_agent": shared_context.get("customer_analysis", {}),
-                "comparison_agent": shared_context.get("comparison_analysis", {}),
-                "final_evaluation": shared_context.get("comparison_analysis", {})
+                "web_search_agent": {"search_results": web_search_data},
+                "market_agent": market_data,
+                "competitor_agent": competitor_data,
+                "customer_agent": customer_data,
+                "comparison_agent": comparison_data,
+                "final_evaluation": comparison_data
             }
+            
+            # Apply (6) Final Response Guardrail
+            return GuardrailManager.verify_final_response(raw_response)
 
         except Exception as e:
             logger.exception(f"P2P Mesh Network failed for idea: '{startup_idea}'")

@@ -78,8 +78,30 @@ User Input → FastAPI → Orchestrator
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React 19, Vite, Tailwind CSS, Framer Motion |
-| Backend | FastAPI, Python 3.10+, Uvicorn |
-| LLM | OpenRouter (gpt-oss-20b:free) |
+| Frontend | React 19, Vite, Tailwind CSS, Framer Motion, Recharts |
+| Backend | FastAPI, Python 3.10+, Uvicorn, SQLite |
+| LLM | OpenRouter (Multiple models supported) |
 | Search | Tavily Search API (async httpx) |
 | Styling | Outfit + Inter fonts, Glassmorphism UI |
+
+## API Documentation
+The API is automatically documented via OpenAPI (Swagger). Once the backend is running, navigate to `http://localhost:8000/docs` to view the interactive API playground, schemas, and endpoints.
+
+## User Guide
+1. Create an account or log in via the interactive Authentication screen.
+2. Navigate to the **Validate** page from the top navigation bar.
+3. Describe your startup idea in plain English (or select a sample idea to autofill).
+4. Select your industry from the dropdown (optional).
+5. Click **Validate**. 
+6. Wait for the A2A mesh network to compile the research. Use the sticky **Quick Nav** sidebar to quickly jump between the Market, Customer, Competitor, and Feature Matrix sections of the generated report.
+
+## Developer Guide
+### Adding New Agents
+To add a new agent to the mesh:
+1. Create a new file in `backend/agents/`.
+2. Define the agent class and accept `shared_context` in the `__init__`.
+3. Implement `get_analysis()` to await the `WebSearchAgent` and execute your unique LLM parsing logic.
+4. Instantiate the agent in `orchestrator.py`, add it to the `peers` dictionary, and call `.connect_peers()`.
+
+### Editing the UI
+The frontend uses standard React functional components. All styling is managed via Tailwind utility classes. The `api.js` file handles all outbound requests with an automated exponential backoff interceptor for transient network failures.

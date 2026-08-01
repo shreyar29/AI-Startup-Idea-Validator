@@ -45,13 +45,17 @@ class ComparisonAgent:
 
     async def _perform_analysis(self):
         logger.info("ComparisonAgent: Awaiting payloads from Market, Customer, and Competitor peers.")
-        # Pull data dynamically from peers if available sequentially to prevent HTTP 429 Rate Limits
+        # Pull data dynamically from peers concurrently
+        tasks = []
         if "market" in self.peers:
-            await self.peers["market"].get_analysis()
+            tasks.append(self.peers["market"].get_analysis())
         if "customer" in self.peers:
-            await self.peers["customer"].get_analysis()
+            tasks.append(self.peers["customer"].get_analysis())
         if "competitor" in self.peers:
-            await self.peers["competitor"].get_analysis()
+            tasks.append(self.peers["competitor"].get_analysis())
+            
+        if tasks:
+            await asyncio.gather(*tasks)
             
         logger.info("ComparisonAgent: Successfully received all upstream analytical payloads.")
         result = await self.compare()

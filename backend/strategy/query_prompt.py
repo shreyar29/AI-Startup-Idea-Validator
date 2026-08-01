@@ -58,6 +58,7 @@ Given a startup idea described in natural language, you must:
    - customer_pain_points
    - funding
    - recent_news
+   - related_articles
    - regulations (only include this category if it is genuinely applicable
      to the idea; omit it entirely if not relevant)
 
@@ -104,6 +105,7 @@ The JSON must follow this exact shape:
     "customer_pain_points": ["string"],
     "funding": ["string"],
     "recent_news": ["string"],
+    "related_articles": ["string"],
     "regulations": ["string"]
   }
 }

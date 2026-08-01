@@ -36,6 +36,7 @@ from services.tavily_service import TavilySearchService
 from processors.result_processor import ResultProcessor
 from utils.logger import get_logger
 from utils.text_sanitizer import sanitize_category_queries
+from guardrails.manager import GuardrailManager
 from utils.error_handler import (
     QueryStrategistError,
     LLMResponseError,
@@ -104,14 +105,18 @@ class WebSearchAgent:
             
             # Stage 2: Sanitize Queries (decoupling from LLM artifacts)
             logger.info("Sanitizing generated search queries.")
-            sanitized_queries = sanitize_category_queries(query_data["queries"])
+            
+            # (2) Query Guardrail
+            sanitized_queries = GuardrailManager.validate_queries(query_data["queries"])
             logger.info("Query sanitization completed.")
 
             # Stage 3: Execute Searches
             raw_results = await self._execute_searches(sanitized_queries)
 
             # Stage 4: Process Results
-            processed_results = self._process_results(raw_results)
+            # (3) Search Guardrail
+            filtered_raw_results = GuardrailManager.filter_search_results(raw_results)
+            processed_results = self._process_results(filtered_raw_results)
 
             # Stage 5: Assemble Final Output
             final_output = self._assemble_output(

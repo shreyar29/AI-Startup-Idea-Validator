@@ -95,8 +95,9 @@ class QueryStrategist:
                         "identified_context": "Fallback Context",
                         "queries": {
                             "competitors": [f"{cleaned_idea} competitors"],
-                            "market_data": [f"{cleaned_idea} market size"],
-                            "target_audience": [f"who uses {cleaned_idea}"]
+                            "market_size": [f"{cleaned_idea} market size"],
+                            "target_audience": [f"who uses {cleaned_idea}"],
+                            "related_articles": [f"{cleaned_idea} related blogs articles"]
                         }
                     }
 

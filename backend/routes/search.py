@@ -4,6 +4,7 @@ from services.tavily_service import TavilySearchService
 from processors.result_processor import ResultProcessor
 from llm.openrouter_client import OpenRouterClient
 from utils.logger import get_logger
+from guardrails.manager import GuardrailManager
 
 logger = get_logger(__name__)
 
@@ -29,7 +30,17 @@ async def search(query: str = Query(..., min_length=10, max_length=1000, descrip
     """
     try:
         logger.info(f"Received search request for idea: {query}")
-        return await orchestrator.validate_idea(query)
+        
+        # (1) Input Guardrail
+        try:
+            valid_query = GuardrailManager.validate_input(query)
+        except ValueError as e:
+            logger.warning(f"Input validation failed: {str(e)}")
+            raise HTTPException(status_code=400, detail=str(e))
+            
+        return await orchestrator.validate_idea(valid_query)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Error processing search request")
         raise HTTPException(status_code=500, detail=str(e))

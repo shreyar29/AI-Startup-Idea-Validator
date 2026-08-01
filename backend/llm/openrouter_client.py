@@ -82,7 +82,7 @@ class OpenRouterClient:
     """
 
     # Default timeout (seconds) applied to every request unless overridden.
-    DEFAULT_TIMEOUT_SECONDS: float = 30.0
+    DEFAULT_TIMEOUT_SECONDS: float = 180.0
 
     def __init__(
         self,
