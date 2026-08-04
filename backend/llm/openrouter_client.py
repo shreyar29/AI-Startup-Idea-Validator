@@ -1,147 +1,53 @@
-"""
-openrouter_client.py
-
-Purpose
--------
-This module provides a reusable, agent-agnostic client for communicating
-with the OpenRouter API. It knows nothing about startup ideas, search
-queries, market analysis, or Tavily — its only job is: given a system
-prompt and a user prompt, send them to the configured model on OpenRouter
-and return the generated text.
-
-Any current or future agent in the Multi-Agent System (Query Strategist,
-Market Analysis Agent, SWOT Agent, etc.) can depend on this same client
-without coupling to each other's business logic.
-
-This module contains NO business logic, NO prompt content, and NO
-knowledge of any specific agent's responsibilities.
-"""
-
-from __future__ import annotations
-
 import logging
 import os
+import random
+import asyncio
+import time
 from typing import Any
 
 import httpx
 from dotenv import load_dotenv
 
-# Load environment variables from .env as early as possible so that
-# configuration is available the moment this module is imported.
-load_dotenv()
+load_dotenv(override=True)
 
 logger = logging.getLogger(__name__)
 
-
-# ============================================================
-# CUSTOM EXCEPTIONS
-# ============================================================
-# Domain-specific exceptions let callers (e.g., query_strategist.py) catch
-# LLM-client failures without needing to know about httpx internals.
-
 class OpenRouterConfigError(Exception):
-    """Raised when required configuration (env vars) is missing or invalid."""
-
-
-class OpenRouterAuthError(Exception):
-    """Raised when the OpenRouter API rejects the request due to an invalid
-    or missing API key."""
-
-
-class OpenRouterTimeoutError(Exception):
-    """Raised when a request to OpenRouter times out."""
-
-
-class OpenRouterNetworkError(Exception):
-    """Raised when a network-level failure prevents reaching OpenRouter."""
-
-
-class OpenRouterAPIError(Exception):
-    """Raised when OpenRouter responds with a non-success status code that
-    is not specifically an authentication failure."""
-
-
-class OpenRouterResponseError(Exception):
-    """Raised when OpenRouter's response body is missing expected fields or
-    cannot be parsed into a usable response."""
-
-
-# ============================================================
-# CLIENT
-# ============================================================
+    pass
 
 class OpenRouterClient:
-    """
-    A minimal, reusable async client for the OpenRouter chat completions
-    API. Any agent that needs to call an LLM can construct one of these
-    and call `generate_response()`.
+    _semaphore = None
+    _shared_client = None
 
-    This class deliberately has no awareness of what the prompts contain
-    or what the response will be used for — that separation keeps it
-    reusable across every current and future agent in the system.
-    """
-
-    # Default timeout (seconds) applied to every request unless overridden.
-    DEFAULT_TIMEOUT_SECONDS: float = 180.0
-
-    def __init__(
-        self,
-        api_key: str | None = None,
-        model: str | None = None,
-        base_url: str | None = None,
-        timeout_seconds: float | None = None,
-    ) -> None:
-        """
-        Initialize the OpenRouter client.
-
-        Configuration values fall back to environment variables when not
-        explicitly passed in, so the client can be constructed with zero
-        arguments in normal application use, while still being easy to
-        override for testing.
-
-        Args:
-            api_key: OpenRouter API key. Falls back to OPENROUTER_API_KEY.
-            model: Model identifier to use. Falls back to OPENROUTER_MODEL.
-            base_url: OpenRouter API base URL. Falls back to
-                OPENROUTER_BASE_URL.
-            timeout_seconds: Per-request timeout. Defaults to
-                DEFAULT_TIMEOUT_SECONDS if not provided.
-
-        Raises:
-            OpenRouterConfigError: If any required configuration value is
-                missing after checking both the constructor argument and
-                the corresponding environment variable.
-        """
+    def __init__(self, api_key: str = None, model: str = None):
         self._api_key = api_key or os.getenv("OPENROUTER_API_KEY")
-        self._model = model or os.getenv("OPENROUTER_MODEL")
-        self._base_url = base_url or os.getenv("OPENROUTER_BASE_URL")
-        self._timeout_seconds = timeout_seconds or self.DEFAULT_TIMEOUT_SECONDS
+        self._model = model or os.getenv("OPENROUTER_MODEL") or "meta-llama/llama-3.1-8b-instruct:free"
+        self._base_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+        self._max_retries = int(os.getenv("OPENROUTER_MAX_RETRIES", "5"))
+        self._timeout = float(os.getenv("OPENROUTER_TIMEOUT", "60.0"))
+        self._max_tokens = int(os.getenv("OPENROUTER_MAX_TOKENS", "900"))
+        self._use_json_mode = os.getenv("OPENROUTER_USE_JSON_MODE", "True").lower() in ("true", "1", "yes")
+        
+        concurrency = int(os.getenv("OPENROUTER_CONCURRENCY", "4"))
 
-        self._validate_config()
+        if not self._api_key:
+            logger.error("Missing OPENROUTER_API_KEY.")
+            raise OpenRouterConfigError("Missing OPENROUTER_API_KEY")
 
-        logger.info("OpenRouter client initialized.")
+        if OpenRouterClient._semaphore is None:
+            OpenRouterClient._semaphore = asyncio.Semaphore(concurrency)
+            
+        if OpenRouterClient._shared_client is None:
+            limits = httpx.Limits(max_keepalive_connections=concurrency, max_connections=concurrency * 2)
+            OpenRouterClient._shared_client = httpx.AsyncClient(limits=limits, timeout=self._timeout)
 
-    def _validate_config(self) -> None:
-        """
-        Ensure all required configuration values are present. Fails fast at
-        construction time rather than at the moment of the first request.
-        """
-        missing = [
-            name
-            for name, value in (
-                ("OPENROUTER_API_KEY", self._api_key),
-                ("OPENROUTER_MODEL", self._model),
-                ("OPENROUTER_BASE_URL", self._base_url),
-            )
-            if not value
-        ]
-        if missing:
-            message = (
-                f"Missing required OpenRouter configuration: {missing}. "
-                f"Set these in your .env file or pass them explicitly."
-            )
-            logger.error(message)
-            raise OpenRouterConfigError(message)
+        logger.info(f"OpenRouter client initialized. Model: {self._model}, Concurrency: {concurrency}")
+
+    async def close(self):
+        """Clean up the shared httpx client."""
+        if OpenRouterClient._shared_client is not None:
+            await OpenRouterClient._shared_client.aclose()
+            OpenRouterClient._shared_client = None
 
     async def generate_response(
         self,
@@ -149,193 +55,99 @@ class OpenRouterClient:
         user_prompt: str,
         response_format: dict[str, Any] | None = None,
     ) -> str:
-        """
-        Send a system prompt and user prompt to OpenRouter and return the
-        generated assistant text.
-
-        Args:
-            system_prompt: The system-level instructions for the model.
-            user_prompt: The user-level input for the model.
-            response_format: Optional dict to request structured output, e.g., {"type": "json_object"}.
-
-        Returns:
-            The generated response text from the assistant.
-
-        Raises:
-            OpenRouterAuthError: If the API key is invalid or rejected.
-            OpenRouterTimeoutError: If the request times out.
-            OpenRouterNetworkError: If a network-level error occurs.
-            OpenRouterAPIError: For other non-success HTTP responses.
-            OpenRouterResponseError: If the response body is malformed or
-                missing expected fields.
-        """
-        payload = self._build_payload(system_prompt, user_prompt, response_format)
-        headers = self._build_headers()
-
-        logger.info("Sending request to OpenRouter (model=%s).", self._model)
-
-        raw_response = await self._send_request(headers, payload)
-        response_text = self._parse_response(raw_response)
-
-        logger.info("Response received successfully from OpenRouter.")
-        return response_text
-
-    def _build_payload(
-        self,
-        system_prompt: str,
-        user_prompt: str,
-        response_format: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """Build the JSON request body for the chat completions endpoint."""
+        
+        url = f"{self._base_url}/chat/completions"
+        
         payload = {
             "model": self._model,
             "messages": [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
+                {"role": "user", "content": user_prompt}
             ],
+            "temperature": 0.2,
+            "max_tokens": self._max_tokens
         }
-        if response_format:
-            payload["response_format"] = response_format
-        return payload
+        
+        if self._use_json_mode and response_format and response_format.get("type") == "json_object":
+            payload["response_format"] = {"type": "json_object"}
 
-    def _build_headers(self) -> dict[str, str]:
-        """Build request headers, including the bearer token."""
-        return {
+        headers = {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
+            "HTTP-Referer": "http://localhost:8000",
+            "X-Title": "AI Startup Validator"
         }
 
-    async def _send_request(
-        self,
-        headers: dict[str, str],
-        payload: dict[str, Any],
-    ) -> dict[str, Any]:
-        """
-        Perform the actual HTTP call to OpenRouter with automatic exponential backoff 
-        for 429 Rate Limit errors and network timeouts.
-        """
-        url = f"{self._base_url.rstrip('/')}/chat/completions"
-        import asyncio
-        import random
-
-        max_retries = 3
         base_backoff = 2.0
+        start_time = time.time()
 
-        for attempt in range(max_retries + 1):
-            try:
-                async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-                    response = await client.post(url, headers=headers, json=payload)
-            except httpx.TimeoutException as exc:
-                if attempt == max_retries:
-                    logger.error("Timeout occurred while calling OpenRouter.")
-                    raise OpenRouterTimeoutError(
-                        "Request to OpenRouter timed out."
-                    ) from exc
-                sleep_time = base_backoff * (2 ** attempt) + random.uniform(0, 1)
-                logger.warning(f"OpenRouter Timeout on attempt {attempt+1}. Retrying in {sleep_time:.1f}s...")
-                await asyncio.sleep(sleep_time)
-                continue
-            except httpx.RequestError as exc:
-                if attempt == max_retries:
-                    logger.error("Network error while calling OpenRouter: %s", exc)
-                    raise OpenRouterNetworkError(
-                        "A network error occurred while contacting OpenRouter."
-                    ) from exc
-                sleep_time = base_backoff * (2 ** attempt) + random.uniform(0, 1)
-                logger.warning(f"OpenRouter Network error on attempt {attempt+1}. Retrying in {sleep_time:.1f}s...")
-                await asyncio.sleep(sleep_time)
-                continue
+        async with OpenRouterClient._semaphore:
+            for attempt in range(self._max_retries + 1):
+                try:
+                    req_start = time.time()
+                    response = await OpenRouterClient._shared_client.post(url, headers=headers, json=payload)
+                    req_duration = time.time() - req_start
 
-            if response.status_code == 401:
-                logger.error("Invalid API Key rejected by OpenRouter.")
-                raise OpenRouterAuthError(
-                    "OpenRouter rejected the request due to an invalid API key."
-                )
+                    if response.status_code == 200:
+                        data = response.json()
+                        choices = data.get("choices", [])
+                        if not choices:
+                            raise OpenRouterConfigError("No choices returned from OpenRouter.")
+                        
+                        content = choices[0].get("message", {}).get("content", "")
+                        total_duration = time.time() - start_time
+                        
+                        logger.info(
+                            f"OpenRouter Success | Model: {self._model} | "
+                            f"Status: 200 | Latency: {req_duration:.2f}s | "
+                            f"Total Time: {total_duration:.2f}s | "
+                            f"Attempts: {attempt + 1}/{self._max_retries + 1} | "
+                            f"Response Size: {len(content)} chars | "
+                            f"Max Tokens: {self._max_tokens} | Timeout: {self._timeout}s"
+                        )
+                        return content
 
-            if response.status_code == 429:
-                if attempt == max_retries:
-                    logger.error(f"Rate limit (429) exhausted after {max_retries} retries.")
-                    raise OpenRouterAPIError(f"OpenRouter API request failed with status {response.status_code}.")
-                sleep_time = base_backoff * (2 ** attempt) + random.uniform(1, 3)
-                logger.warning(f"HTTP 429 Rate Limit on attempt {attempt+1}. Retrying in {sleep_time:.1f}s...")
-                await asyncio.sleep(sleep_time)
-                continue
+                    if response.status_code in (429, 500, 503):
+                        if attempt == self._max_retries:
+                            logger.error(f"Error {response.status_code} exhausted after {self._max_retries} retries.")
+                            raise OpenRouterConfigError(f"API request failed with status {response.status_code}.")
+                        
+                        sleep_time = base_backoff * (2 ** attempt) + random.uniform(1, 3)
+                        logger.warning(
+                            f"OpenRouter Transient Error | Status: {response.status_code} | "
+                            f"Attempt: {attempt+1} | Retrying in {sleep_time:.1f}s..."
+                        )
+                        await asyncio.sleep(sleep_time)
+                        continue
 
-            if response.status_code >= 400:
-                logger.error(
-                    "API request failed with status %s: %s",
-                    response.status_code,
-                    response.text,
-                )
-                raise OpenRouterAPIError(
-                    f"OpenRouter API request failed with status {response.status_code}."
-                )
+                    logger.error(f"API request failed with status {response.status_code}: {response.text}")
+                    raise OpenRouterConfigError(f"API request failed with status {response.status_code}.")
 
-            try:
-                return response.json()
-            except ValueError as exc:
-                logger.error("Failed to decode JSON from OpenRouter response.")
-                raise OpenRouterResponseError(
-                    "OpenRouter response body was not valid JSON."
-                ) from exc
+                except asyncio.CancelledError:
+                    logger.warning("OpenRouter request cancelled by orchestrator. Aborting.")
+                    raise
+                except httpx.TimeoutException:
+                    if attempt == self._max_retries:
+                        logger.error(f"OpenRouter Timeout | Model: {self._model} | Timeout: {self._timeout}s | Attempt: {attempt+1}/{self._max_retries+1}")
+                        raise OpenRouterConfigError(
+                            f"OpenRouter Timeout\n"
+                            f"Model: {self._model}\n"
+                            f"Timeout: {self._timeout}s\n"
+                            f"Attempt: {attempt+1}/{self._max_retries+1}"
+                        )
+                    sleep_time = base_backoff * (2 ** attempt) + random.uniform(0, 1)
+                    logger.warning(
+                        f"OpenRouter Timeout | Model: {self._model} | "
+                        f"Timeout: {self._timeout}s | Attempt: {attempt+1}/{self._max_retries+1} | "
+                        f"Retrying in {sleep_time:.1f}s..."
+                    )
+                    await asyncio.sleep(sleep_time)
+                except httpx.RequestError as exc:
+                    if attempt == self._max_retries:
+                        raise OpenRouterConfigError(f"Network error: {exc}")
+                    sleep_time = base_backoff * (2 ** attempt) + random.uniform(0, 1)
+                    logger.warning(f"OpenRouter Network Error | Attempt: {attempt+1}/{self._max_retries+1} | Retrying in {sleep_time:.1f}s...")
+                    await asyncio.sleep(sleep_time)
 
-    def _parse_response(self, raw_response: dict[str, Any]) -> str:
-        """
-        Extract the assistant's generated text from OpenRouter's response
-        body, validating that the expected structure is present.
-        """
-        try:
-            choices = raw_response["choices"]
-            content = choices[0]["message"]["content"]
-        except (KeyError, IndexError, TypeError) as exc:
-            logger.error(
-                "Unexpected response structure from OpenRouter: %s",
-                raw_response,
-            )
-            raise OpenRouterResponseError(
-                "OpenRouter response did not contain the expected "
-                "'choices[0].message.content' structure."
-            ) from exc
-
-        if not isinstance(content, str) or not content.strip():
-            raise OpenRouterResponseError(
-                "OpenRouter response content was empty."
-            )
-
-        return content
-
-
-# ============================================================
-# MANUAL / STANDALONE TEST ENTRY POINT
-# ============================================================
-
-if __name__ == "__main__":
-    import asyncio
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    )
-
-    async def _main() -> None:
-        try:
-            client = OpenRouterClient()
-            result = await client.generate_response(
-                system_prompt="You are a helpful assistant.",
-                user_prompt="Say Hello",
-            )
-            print("Response from OpenRouter:")
-            print(result)
-        except (
-            OpenRouterConfigError,
-            OpenRouterAuthError,
-            OpenRouterTimeoutError,
-            OpenRouterNetworkError,
-            OpenRouterAPIError,
-            OpenRouterResponseError,
-        ) as known_error:
-            logger.error("Client test run failed: %s", known_error)
-        except Exception:
-            logger.exception("Unexpected exception during client test run.")
-
-    asyncio.run(_main())
+            # Safety net: should never be reached, but prevents silent None return
+            raise OpenRouterConfigError("All retry attempts exhausted without a response.")

@@ -39,6 +39,16 @@ def get_logger(name: str) -> logging.Logger:
         handler.setFormatter(formatter)
         logger.addHandler(handler)
         
+        # Add FileHandler for SSE streaming
+        try:
+            file_handler = logging.FileHandler("validation.log", mode="a", encoding="utf-8")
+            file_formatter = logging.Formatter('%(message)s')
+            file_handler.setFormatter(file_formatter)
+            file_handler.setLevel(getattr(logging, log_level, logging.INFO))
+            logger.addHandler(file_handler)
+        except Exception:
+            pass
+        
         # Prevent double logging
         logger.propagate = False
         

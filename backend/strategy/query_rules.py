@@ -31,19 +31,14 @@ from __future__ import annotations
 SEARCH_CATEGORIES: tuple[str, ...] = (
     "competitors",
     "market_size",
-    "industry_trends",
-    "customer_pain_points",
-    "funding",
-    "recent_news",
-    "related_articles",
+    "customers",
+    "trends",
+    "pricing",
+    "technology",
+    "business_model"
 )
 
-# Categories that are conditionally included based on the startup's
-# industry. Currently only "regulations" — included when the industry is
-# one where regulatory/legal/compliance concerns are typically material.
-OPTIONAL_CATEGORIES: tuple[str, ...] = (
-    "regulations",
-)
+OPTIONAL_CATEGORIES: tuple[str, ...] = ()
 
 # Industries for which the "regulations" category should be generated.
 # Stored in lowercase for case-insensitive matching in

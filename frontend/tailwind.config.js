@@ -6,18 +6,18 @@ export default {
   ],
   theme: {
     extend: {
-      fontFamily: {
-        sans: ['Inter', 'sans-serif'],
-        outfit: ['Outfit', 'sans-serif'],
-      },
       colors: {
         background: '#0B0F19',
-        surface: '#131B2D',
-        primary: '#06b6d4',
-        primaryHover: '#0891b2',
+        surface: '#1A2235',
+        primary: '#3B82F6',
+        primaryDark: '#2563EB',
+        secondary: '#10B981',
         textMain: '#F3F4F6',
         textMuted: '#9CA3AF',
-        accent: '#D946EF',
+        accent: '#8B5CF6'
+      },
+      fontFamily: {
+        sans: ['Inter', 'sans-serif'],
       }
     },
   },

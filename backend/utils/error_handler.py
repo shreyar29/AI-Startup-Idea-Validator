@@ -27,7 +27,6 @@ from functools import wraps
 from datetime import datetime, timezone
 
 logger = logging.getLogger("web_search_agent.error_handler")
-logging.basicConfig(level=logging.INFO)
 
 
 # ---------------------------------------------------------------------------

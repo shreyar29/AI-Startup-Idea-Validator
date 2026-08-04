@@ -1,9 +1,5 @@
-from __future__ import annotations
-from services.tavily_service import search_web
-
-def search_startup(startup_idea):
-    return search_web(startup_idea)
 """
+
 web_search_agent.py
 
 Purpose
@@ -27,6 +23,7 @@ orchestration level, and return one final structured JSON object that
 becomes the input contract for the future Market Analysis Agent.
 """
 
+from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 from typing import Any
@@ -116,13 +113,17 @@ class WebSearchAgent:
             # Stage 4: Process Results
             # (3) Search Guardrail
             filtered_raw_results = GuardrailManager.filter_search_results(raw_results)
-            processed_results = self._process_results(filtered_raw_results)
+            processed_results = self._process_results(filtered_raw_results, startup_idea)
+
+            # --- Filter & Rank Results ---
+            refined_results, category_metadata = self._filter_and_rank_results(processed_results)
 
             # Stage 5: Assemble Final Output
             final_output = self._assemble_output(
                 query_data=query_data,
                 sanitized_queries=sanitized_queries,
-                processed_results=processed_results,
+                processed_results=refined_results,
+                category_metadata=category_metadata,
             )
 
             logger.info("Web Search Agent pipeline completed successfully.")
@@ -171,7 +172,7 @@ class WebSearchAgent:
         """Executes a search against Tavily with exponential backoff retries."""
         for attempt in range(max_retries + 1):
             try:
-                return await self._search_service.search(queries)
+                return await self._search_service.search(category, queries)
             except SearchServiceError as exc:
                 if attempt < max_retries:
                     backoff = 2 ** attempt
@@ -187,10 +188,11 @@ class WebSearchAgent:
     def _process_results(
         self,
         raw_results: dict[str, list[dict[str, Any]]],
+        startup_idea: str = ""
     ) -> dict[str, list[dict[str, Any]]]:
         logger.info("Stage 3/3: Result processing started.")
         try:
-            processed = self._result_processor.process(raw_results)
+            processed = self._result_processor.process(raw_results, startup_idea)
             logger.info("Stage 3/3: Result processing completed successfully.")
             return processed
         except ResultProcessingError as exc:
@@ -202,6 +204,7 @@ class WebSearchAgent:
         query_data: dict[str, Any],
         sanitized_queries: dict[str, list[str]],
         processed_results: dict[str, list[dict[str, Any]]],
+        category_metadata: dict[str, Any] = None,
     ) -> dict[str, Any]:
         """
         Combine the context, cleaned queries, results, and execution metadata
@@ -209,19 +212,118 @@ class WebSearchAgent:
         """
         total_queries = sum(len(queries) for queries in sanitized_queries.values())
         
+        stats = getattr(self._result_processor, "last_stats", {})
+        
+        metadata = {
+            "status": "success",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "agent": "WebSearchAgent",
+            "version": "1.0",
+            "total_categories_processed": len(sanitized_queries),
+            "total_search_queries_executed": total_queries
+        }
+        
+        if stats:
+            metadata.update(stats)
+            
+        if category_metadata:
+            metadata["category_metadata"] = category_metadata
+            
         return {
-            "metadata": {
-                "status": "success",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "agent": "WebSearchAgent",
-                "version": "1.0",
-                "total_categories_processed": len(sanitized_queries),
-                "total_search_queries_executed": total_queries
-            },
+            "metadata": metadata,
             "identified_context": query_data["identified_context"],
             "search_queries": sanitized_queries,
             "search_results": processed_results,
         }
+
+    def _filter_and_rank_results(
+        self, processed_results: dict[str, list[dict[str, Any]]]
+    ) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
+        from urllib.parse import urlparse
+        
+        refined_results = {}
+        category_metadata = {}
+        
+        trusted_domains = [
+            "gartner.com", "statista.com", "mckinsey.com", "forbes.com", 
+            "bloomberg.com", "wsj.com", "techcrunch.com", ".gov", ".edu", 
+            "forrester.com", "idc.com", "techradar.com", "cnbc.com", "reuters.com"
+        ]
+        
+        for category, results in processed_results.items():
+            results_found = len(results)
+            
+            valid_results = []
+            for r in results:
+                url = str(r.get("url") or "")
+                content = str(r.get("content") or "")
+                
+                # Filter out missing URL or empty content
+                if not url.strip() or not content.strip():
+                    continue
+                    
+                # Filter out extremely short content
+                if len(content.strip()) < 40:
+                    continue
+                    
+                # Do not filter out by relevance, just use it for sorting
+                try:
+                    relevance_score = float(r.get("relevance_score", r.get("score", 0.0)))
+                except (ValueError, TypeError):
+                    relevance_score = 0.0
+                
+                valid_results.append((relevance_score, r))
+                
+            # Sort by relevance descending
+            valid_results.sort(key=lambda x: x[0], reverse=True)
+            
+            # Deduplicate domains and keep top 5
+            final_cat_results = []
+            seen_domains = set()
+            trusted_count = 0
+            
+            for score, r in valid_results:
+                url = r.get("url", "")
+                try:
+                    domain = urlparse(url).netloc.lower()
+                    if domain.startswith("www."):
+                        domain = domain[4:]
+                except Exception:
+                    domain = url
+                    
+                if domain in seen_domains:
+                    continue
+                    
+                seen_domains.add(domain)
+                final_cat_results.append(r)
+                
+                if any(td in domain for td in trusted_domains):
+                    trusted_count += 1
+                
+                if len(final_cat_results) >= 5:
+                    break
+                    
+            # 1. Never Return Empty Results if original had data
+            fallback_used = False
+            if len(final_cat_results) == 0 and results_found > 0:
+                fallback_used = True
+                final_cat_results = results  # Fallback to original results
+                # Compute trusted sources for metadata accurately
+                for r in final_cat_results:
+                    if any(td in str(r.get("url", "")).lower() for td in trusted_domains):
+                        trusted_count += 1
+                        
+            logger.info(f"Category '{category}' | Original: {results_found} | After filtering: {len(final_cat_results)} | Fallback used: {fallback_used}")
+                    
+            refined_results[category] = final_cat_results
+            category_metadata[category] = {
+                "results_found": results_found,
+                "results_kept": len(final_cat_results),
+                "trusted_sources": trusted_count,
+                "fallback_used": fallback_used
+            }
+            
+        return refined_results, category_metadata
 
 # ============================================================
 # STANDALONE TEST BLOCK WITH MOCKS
@@ -243,7 +345,7 @@ if __name__ == "__main__":
 
     class MockTavilyService(TavilySearchService):
         def __init__(self): self._fail_once = True
-        async def search(self, queries: list[str]) -> list[dict[str, Any]]:
+        async def search(self, category: str, queries: list[str]) -> list[dict[str, Any]]:
             # Simulate a transient failure on the first call to test retry logic
             if self._fail_once:
                 self._fail_once = False
@@ -252,7 +354,7 @@ if __name__ == "__main__":
 
     class MockResultProcessor(ResultProcessor):
         def __init__(self): pass
-        def process(self, raw_results: dict[str, list[dict[str, Any]]]) -> dict[str, list[dict[str, Any]]]:
+        def process(self, raw_results: dict[str, list[dict[str, Any]]], idea: str = "") -> dict[str, list[dict[str, Any]]]:
             return {cat: [{"cleaned_url": r["url"]} for r in res] for cat, res in raw_results.items()}
 
     async def _test():

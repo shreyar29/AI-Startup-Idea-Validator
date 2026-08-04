@@ -1,96 +1,109 @@
+import React from 'react';
+import { motion } from 'framer-motion';
 import { Mail, MessageSquare, MapPin } from 'lucide-react';
 
 const Contact = () => {
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-      <div className="text-center mb-16">
-        <h1 className="text-4xl font-bold text-white mb-4">Get in Touch</h1>
-        <p className="text-lg text-textMuted max-w-2xl mx-auto">
-          Have questions about the platform, enterprise integration, or just want to say hi? We'd love to hear from you.
-        </p>
+    <div className="min-h-screen pt-24 pb-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+      <div className="text-center max-w-2xl mx-auto mb-16">
+        <motion.h1 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-4xl md:text-5xl font-bold mb-6"
+        >
+          Get in Touch
+        </motion.h1>
+        <motion.p 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="text-lg text-textMuted"
+        >
+          Have questions about the validation process? Need support with an enterprise account? We're here to help.
+        </motion.p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-        <div className="space-y-8">
-          <div className="flex items-start space-x-4">
-            <div className="w-12 h-12 rounded-lg bg-surface flex items-center justify-center flex-shrink-0 border border-white/5">
-              <Mail className="w-6 h-6 text-primary" />
-            </div>
-            <div>
-              <h3 className="text-lg font-medium text-white mb-1">Email</h3>
-              <p className="text-textMuted mb-2">Our friendly team is here to help.</p>
-              <a href="mailto:hello@venturelens.ai" className="text-primary hover:text-primaryHover transition-colors">
-                hello@venturelens.ai
-              </a>
-            </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="glass-panel p-8 rounded-3xl text-center flex flex-col items-center"
+        >
+          <div className="bg-primary/10 w-16 h-16 rounded-full flex items-center justify-center mb-6">
+            <Mail className="h-8 w-8 text-primary" />
           </div>
+          <h3 className="text-xl font-bold mb-2">Email Us</h3>
+          <p className="text-textMuted mb-4">Our team responds within 24 hours.</p>
+          <a href="mailto:support@venturelens.ai" className="text-primary font-medium hover:text-primaryDark transition-colors">
+            support@venturelens.ai
+          </a>
+        </motion.div>
 
-          <div className="flex items-start space-x-4">
-            <div className="w-12 h-12 rounded-lg bg-surface flex items-center justify-center flex-shrink-0 border border-white/5">
-              <MessageSquare className="w-6 h-6 text-primary" />
-            </div>
-            <div>
-              <h3 className="text-lg font-medium text-white mb-1">Live Chat</h3>
-              <p className="text-textMuted mb-2">Available Mon-Fri, 9am to 5pm EST.</p>
-              <button className="text-primary hover:text-primaryHover transition-colors">
-                Start a conversation
-              </button>
-            </div>
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="glass-panel p-8 rounded-3xl text-center flex flex-col items-center"
+        >
+          <div className="bg-secondary/10 w-16 h-16 rounded-full flex items-center justify-center mb-6">
+            <MessageSquare className="h-8 w-8 text-secondary" />
           </div>
-          
-          <div className="flex items-start space-x-4">
-            <div className="w-12 h-12 rounded-lg bg-surface flex items-center justify-center flex-shrink-0 border border-white/5">
-              <MapPin className="w-6 h-6 text-primary" />
-            </div>
-            <div>
-              <h3 className="text-lg font-medium text-white mb-1">Office</h3>
-              <p className="text-textMuted">
-                123 Innovation Drive<br />
-                Tech District<br />
-                San Francisco, CA 94105
-              </p>
-            </div>
-          </div>
-        </div>
+          <h3 className="text-xl font-bold mb-2">Live Chat</h3>
+          <p className="text-textMuted mb-4">Available Mon-Fri, 9am - 5pm EST.</p>
+          <button className="text-secondary font-medium hover:text-secondary/80 transition-colors">
+            Start a Conversation
+          </button>
+        </motion.div>
 
-        <div className="glass-panel p-8 rounded-xl border border-white/5">
-          <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-textMuted mb-2">Name</label>
-              <input
-                type="text"
-                id="name"
-                className="w-full bg-surface border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                placeholder="John Doe"
-              />
-            </div>
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-textMuted mb-2">Email</label>
-              <input
-                type="email"
-                id="email"
-                className="w-full bg-surface border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                placeholder="john@example.com"
-              />
-            </div>
-            <div>
-              <label htmlFor="message" className="block text-sm font-medium text-textMuted mb-2">Message</label>
-              <textarea
-                id="message"
-                rows={4}
-                className="w-full bg-surface border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all resize-none"
-                placeholder="How can we help you?"
-              ></textarea>
-            </div>
-            <button
-              type="submit"
-              className="w-full bg-primary hover:bg-primaryHover text-white font-medium py-3 px-4 rounded-lg transition-colors"
-            >
-              Send Message
-            </button>
-          </form>
-        </div>
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="glass-panel p-8 rounded-3xl text-center flex flex-col items-center"
+        >
+          <div className="bg-accent/10 w-16 h-16 rounded-full flex items-center justify-center mb-6">
+            <MapPin className="h-8 w-8 text-accent" />
+          </div>
+          <h3 className="text-xl font-bold mb-2">Headquarters</h3>
+          <p className="text-textMuted mb-4">Come visit our AI research lab.</p>
+          <p className="text-accent font-medium">
+            123 Innovation Drive<br />San Francisco, CA 94105
+          </p>
+        </motion.div>
       </div>
+
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5 }}
+        className="max-w-2xl mx-auto glass-panel p-8 md:p-12 rounded-3xl"
+      >
+        <h3 className="text-2xl font-bold mb-6 text-center">Send a Message</h3>
+        <form className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">First Name</label>
+              <input type="text" className="w-full bg-surface/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-primary transition-all" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Last Name</label>
+              <input type="text" className="w-full bg-surface/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-primary transition-all" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Email Address</label>
+            <input type="email" className="w-full bg-surface/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-primary transition-all" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Message</label>
+            <textarea rows="4" className="w-full bg-surface/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-primary transition-all resize-none"></textarea>
+          </div>
+          <button type="button" className="w-full bg-primary hover:bg-primaryDark text-white font-bold py-4 rounded-xl transition-colors">
+            Send Message
+          </button>
+        </form>
+      </motion.div>
     </div>
   );
 };

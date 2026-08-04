@@ -85,21 +85,8 @@ class QueryStrategist:
             except Exception as exc:
                 logger.warning("Query Strategist attempt %d failed: %s", attempt, exc)
                 if attempt == max_retries:
-                    logger.error("All retries failed for Query Strategist. Using mock fallback.")
-                    return {
-                        "metadata": {
-                            "agent": "QueryStrategist",
-                            "status": "fallback",
-                            "timestamp": datetime.now(timezone.utc).isoformat()
-                        },
-                        "identified_context": "Fallback Context",
-                        "queries": {
-                            "competitors": [f"{cleaned_idea} competitors"],
-                            "market_size": [f"{cleaned_idea} market size"],
-                            "target_audience": [f"who uses {cleaned_idea}"],
-                            "related_articles": [f"{cleaned_idea} related blogs articles"]
-                        }
-                    }
+                    logger.error("All retries failed for Query Strategist.")
+                    raise QueryStrategistError("Failed to generate valid queries after multiple attempts.") from exc
 
     def _validate_input(self, startup_idea: str) -> str:
         try:

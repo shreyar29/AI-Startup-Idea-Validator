@@ -12,6 +12,8 @@ tool-selection loops which constantly crash on free-tier rate limits.
 import time
 import logging
 import asyncio
+import uuid
+import os
 from typing import Any, Dict
 
 from guardrails.manager import GuardrailManager
@@ -25,6 +27,71 @@ from agents.customer_agent import CustomerAgent
 from agents.comparison_agent import ComparisonAgent
 
 logger = logging.getLogger(__name__)
+
+class OrchestrationError(Exception):
+    """Base exception for orchestrator errors."""
+    pass
+
+class PayloadIntegrityError(OrchestrationError):
+    """Raised when critical payloads are missing or invalid."""
+    pass
+
+class MeshNodeWrapper:
+    """Wraps an agent node to provide timeouts, execution metrics, and partial failure recovery."""
+    def __init__(self, name: str, node: Any, metrics: Dict[str, Any], correlation_id: str, timeout: int = 180):
+        self.name = name
+        self.node = node
+        self.metrics = metrics
+        self.correlation_id = correlation_id
+        self.timeout = timeout
+        self._task = None
+        
+    async def get_analysis(self):
+        if self._task is None:
+            self._task = asyncio.create_task(self._execute())
+        return await self._task
+
+    async def _execute(self):
+        start_time = time.time()
+        self.metrics[self.name] = {
+            "status": "started",
+            "start_time": start_time,
+            "end_time": None,
+            "duration": 0
+        }
+        logger.info(f"[{self.correlation_id}] {self.name}: Execution started.")
+        
+        try:
+            result = await asyncio.wait_for(self.node.get_analysis(), timeout=self.timeout)
+            duration = time.time() - start_time
+            self.metrics[self.name].update({
+                "status": "success",
+                "end_time": time.time(),
+                "duration": round(duration, 2)
+            })
+            logger.info(f"[{self.correlation_id}] {self.name}: Completed successfully in {duration:.2f}s.")
+            return result
+        except asyncio.TimeoutError:
+            duration = time.time() - start_time
+            self.metrics[self.name].update({
+                "status": "timeout",
+                "end_time": time.time(),
+                "duration": round(duration, 2),
+                "error": "Timeout exceeded"
+            })
+            logger.error(f"[{self.correlation_id}] {self.name}: Timed out after {self.timeout}s. Degrading gracefully.")
+            return {}
+        except Exception as e:
+            duration = time.time() - start_time
+            self.metrics[self.name].update({
+                "status": "failed",
+                "end_time": time.time(),
+                "duration": round(duration, 2),
+                "error": str(e)
+            })
+            logger.exception(f"[{self.correlation_id}] {self.name}: Failed with error: {e}. Degrading gracefully.")
+            return {}
+
 
 class StartupValidatorOrchestrator:
     """
@@ -45,18 +112,22 @@ class StartupValidatorOrchestrator:
         Executes the full architecture asynchronously by connecting agents in a mesh
         and requesting the final synthesis.
         """
-        logger.info(f"P2P Mesh Network starting validation for idea: '{startup_idea}'")
+        correlation_id = str(uuid.uuid4())[:8]
+        logger.info(f"[{correlation_id}] P2P Mesh Network starting validation for idea: '{startup_idea}'")
         start_time = time.time()
         
         # Canonical decentralized context pointer passed to all peers
         shared_context = {
             "idea": {"description": startup_idea, "proposed_features": []},
+            "correlation_id": correlation_id,
             "research": {},
             "market_analysis": {},
             "customer_analysis": {},
             "competitor_analysis": {},
             "comparison_analysis": {}
         }
+        
+        metrics = {}
 
         try:
             # 1. Instantiate all Agent Nodes independently
@@ -70,31 +141,36 @@ class StartupValidatorOrchestrator:
             competitor_node = CompetitorAgent(shared_context, llm_client=self.llm_client)
             comparison_node = ComparisonAgent(shared_context, llm_client=self.llm_client)
 
-            # 2. Form the P2P Mesh (Fully Connected)
-            peers = {
-                "web_search": web_search_node,
-                "market": market_node,
-                "customer": customer_node,
-                "competitor": competitor_node,
-                "comparison": comparison_node
+            # 2. Form the P2P Mesh (Fully Connected) with Wrappers
+            wrapped_peers = {
+                "web_search": MeshNodeWrapper("Web Search Agent", web_search_node, metrics, correlation_id, timeout=int(os.getenv("WEB_SEARCH_TIMEOUT", "120"))),
+                "market": MeshNodeWrapper("Market Agent", market_node, metrics, correlation_id, timeout=int(os.getenv("MARKET_AGENT_TIMEOUT", "180"))),
+                "customer": MeshNodeWrapper("Customer Agent", customer_node, metrics, correlation_id, timeout=int(os.getenv("CUSTOMER_AGENT_TIMEOUT", "180"))),
+                "competitor": MeshNodeWrapper("Competitor Agent", competitor_node, metrics, correlation_id, timeout=int(os.getenv("COMPETITOR_AGENT_TIMEOUT", "180"))),
+                "comparison": MeshNodeWrapper("Comparison Agent", comparison_node, metrics, correlation_id, timeout=int(os.getenv("COMPARISON_AGENT_TIMEOUT", "180")))
             }
 
-            for node in peers.values():
-                node.connect_peers(peers)
+            for node in [web_search_node, market_node, customer_node, competitor_node, comparison_node]:
+                node.connect_peers(wrapped_peers)
 
             # 3. Demand-Driven Execution
-            # In a true mesh, we simply ask the final synthesis node for its result. 
-            # It will dynamically pull data from the Customer, Market, and Competitor nodes,
-            # which in turn will concurrently pull from the WebSearch node!
-            logger.info("Requesting final analysis from the Comparison Node...")
-            await comparison_node.get_analysis()
-            
-            web_search_data = await web_search_node.get_analysis()
+            logger.info(f"[{correlation_id}] Awaiting Web Search Node data...")
+            web_search_data = await wrapped_peers["web_search"].get_analysis()
 
+            # Validate payload integrity: check for actual category data, not just truthiness
+            has_categories = isinstance(web_search_data, dict) and any(
+                isinstance(v, list) and len(v) > 0 for v in web_search_data.values()
+            )
+            if not has_categories:
+                logger.error(f"[{correlation_id}] Orchestrator: Web search returned empty or invalid data.")
+                raise PayloadIntegrityError("Web search returned no data. Aborting downstream mesh.")
+                
+            logger.info(f"[{correlation_id}] Payload integrity validated. Triggering P2P Mesh Execution...")
+            await wrapped_peers["comparison"].get_analysis()
+    
             exec_time = time.time() - start_time
-            logger.info(f"P2P Mesh Network completed successfully in {exec_time:.2f} seconds.")
-
-            logger.info("Aggregating final response payloads.")
+            logger.info(f"[{correlation_id}] P2P Mesh Network completed successfully in {exec_time:.2f} seconds.")
+            logger.info(f"[{correlation_id}] Aggregating final response payloads.")
             
             # Apply (4) Agent Output Guardrails and (5) Fact & Hallucination Guardrails
             market_data = GuardrailManager.validate_agent_output(
@@ -104,7 +180,7 @@ class StartupValidatorOrchestrator:
                 "Competitor Agent", shared_context.get("competitor_analysis", {}), ["competitors"]
             )
             customer_data = GuardrailManager.validate_agent_output(
-                "Customer Agent", shared_context.get("customer_analysis", {}), ["target_segments", "pain_points"]
+                "Customer Agent", shared_context.get("customer_analysis", {}), ["target_customer_segments", "pain_points"]
             )
             comparison_data = GuardrailManager.validate_agent_output(
                 "Comparison Agent", shared_context.get("comparison_analysis", {}), ["feature_comparison"]
@@ -113,11 +189,33 @@ class StartupValidatorOrchestrator:
             market_data = GuardrailManager.verify_facts_and_hallucinations("Market Agent", market_data, web_search_data)
             competitor_data = GuardrailManager.verify_facts_and_hallucinations("Competitor Agent", competitor_data, web_search_data)
 
+            # Evaluate overall orchestration status based on mesh execution metrics
+            critical_agents = ["Web Search Agent", "Comparison Agent"]
+            optional_agents = ["Market Agent", "Customer Agent", "Competitor Agent"]
+            
+            overall_status = "success"
+            for critical_agent in critical_agents:
+                agent_metric = metrics.get(critical_agent, {})
+                if agent_metric.get("status") in ["failed", "timeout"]:
+                    overall_status = "failed"
+                    break
+                    
+            if overall_status != "failed":
+                for optional_agent in optional_agents:
+                    agent_metric = metrics.get(optional_agent, {})
+                    if agent_metric.get("status") in ["failed", "timeout"]:
+                        overall_status = "partial_success"
+                        break
+
+            logger.info(f"[{correlation_id}] Orchestration final status evaluated as: {overall_status}")
+
             raw_response = {
                 "metadata": {
                     "startup_idea": startup_idea,
+                    "correlation_id": correlation_id,
                     "execution_time_seconds": round(exec_time, 2),
-                    "status": "success"
+                    "status": overall_status,
+                    "agent_metrics": metrics
                 },
                 "web_search_agent": {"search_results": web_search_data},
                 "market_agent": market_data,
@@ -130,13 +228,22 @@ class StartupValidatorOrchestrator:
             # Apply (6) Final Response Guardrail
             return GuardrailManager.verify_final_response(raw_response)
 
+        except PayloadIntegrityError as e:
+            logger.error(f"[{correlation_id}] Critical Payload Integrity Error: {e}")
+            return self._format_error_response(startup_idea, correlation_id, start_time, str(e), metrics)
         except Exception as e:
-            logger.exception(f"P2P Mesh Network failed for idea: '{startup_idea}'")
-            return {
-                "metadata": {
-                    "startup_idea": startup_idea,
-                    "execution_time_seconds": round(time.time() - start_time, 2),
-                    "status": "error"
-                },
-                "error": str(e)
-            }
+            logger.exception(f"[{correlation_id}] P2P Mesh Network failed unexpectedly for idea: '{startup_idea}'")
+            return self._format_error_response(startup_idea, correlation_id, start_time, f"Unexpected error: {str(e)}", metrics)
+
+    def _format_error_response(self, startup_idea: str, correlation_id: str, start_time: float, error_msg: str, metrics: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "metadata": {
+                "startup_idea": startup_idea,
+                "correlation_id": correlation_id,
+                "execution_time_seconds": round(time.time() - start_time, 2),
+                "status": "failed",
+                "agent_metrics": metrics
+            },
+            "error": error_msg
+        }
+
