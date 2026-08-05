@@ -33,11 +33,8 @@ const Contact = () => {
           <div className="bg-primary/10 w-16 h-16 rounded-full flex items-center justify-center mb-6">
             <Mail className="h-8 w-8 text-primary" />
           </div>
-          <h3 className="text-xl font-bold mb-2">Email Us</h3>
-          <p className="text-textMuted mb-4">Our team responds within 24 hours.</p>
-          <a href="mailto:support@venturelens.ai" className="text-primary font-medium hover:text-primaryDark transition-colors">
-            support@venturelens.ai
-          </a>
+          <h3 className="text-xl font-bold mb-2">Email Support</h3>
+          <p className="text-textMuted mb-4">Please use the contact form below to reach our support team.</p>
         </motion.div>
 
         <motion.div 
@@ -65,11 +62,8 @@ const Contact = () => {
           <div className="bg-accent/10 w-16 h-16 rounded-full flex items-center justify-center mb-6">
             <MapPin className="h-8 w-8 text-accent" />
           </div>
-          <h3 className="text-xl font-bold mb-2">Headquarters</h3>
-          <p className="text-textMuted mb-4">Come visit our AI research lab.</p>
-          <p className="text-accent font-medium">
-            123 Innovation Drive<br />San Francisco, CA 94105
-          </p>
+          <h3 className="text-xl font-bold mb-2">Global Team</h3>
+          <p className="text-textMuted mb-4">We are a fully remote organization.</p>
         </motion.div>
       </div>
 

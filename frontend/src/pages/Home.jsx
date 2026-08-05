@@ -1,94 +1,299 @@
-import React from 'react';
-import { motion } from 'framer-motion';
-import { Link } from 'react-router-dom';
-import { ArrowRight, BrainCircuit, Target, TrendingUp, ShieldCheck } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Sparkles, ArrowRight, Loader2, Search, Target, Users, 
+  BrainCircuit, CheckCircle2, Lightbulb, LineChart, ShieldCheck
+} from 'lucide-react';
+import { validateIdea } from '../services/api';
+
+const SUGGESTIONS = [
+  { industry: "Cybersecurity", title: "SOC2 Automation", desc: "A B2B SaaS platform that automates SOC2 compliance for startups." },
+  { industry: "Health & Wellness", title: "Smart Meal Plans", desc: "An AI tool that generates personalized meal plans to minimize food waste." },
+  { industry: "Entertainment", title: "Indie Venue Booking", desc: "A marketplace connecting local indie musicians with venue owners." }
+];
+
+const CAPABILITIES = [
+  { icon: LineChart, title: "Market Intelligence", desc: "Analyzes industry trends, TAM, growth and demand." },
+  { icon: Target, title: "Competitor Analysis", desc: "Finds competitors and identifies differentiation opportunities." },
+  { icon: Users, title: "Customer Research", desc: "Builds customer personas using real market evidence." },
+  { icon: BrainCircuit, title: "AI Recommendation", desc: "Provides a data-backed Go / No-Go recommendation." },
+];
+
+const FLOW_STEPS = [
+  { icon: Lightbulb, title: "Idea", desc: "Submit concept" },
+  { icon: Search, title: "Research", desc: "Live web analysis" },
+  { icon: LineChart, title: "Market", desc: "Data analysis" },
+  { icon: Target, title: "Competitors", desc: "Feature comparison" },
+  { icon: CheckCircle2, title: "Verdict", desc: "Recommendation" },
+];
+
+const TRUST_ITEMS = [
+  "Multi-Agent AI",
+  "Real-time Market Intelligence",
+  "Live Competitor Research",
+  "Customer Persona Generation",
+  "Strategic Recommendations"
+];
+
+const VALUE_PREVIEW = [
+  "Validation Score", "Market Opportunity", "Competitor Landscape", "Customer Personas", "SWOT Analysis", "Product Recommendations"
+];
 
 const Home = () => {
+  const [idea, setIdea] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const navigate = useNavigate();
+  const textareaRef = useRef(null);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.max(160, textareaRef.current.scrollHeight)}px`;
+    }
+  }, [idea]);
+
+  const submitForm = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (idea.trim().length >= 10) {
+      navigate('/dashboard', { state: { idea: idea.trim() } });
+    }
+  };
+
   return (
-    <div className="pt-20">
-      {/* Hero Section */}
-      <section className="relative min-h-[90vh] flex items-center justify-center overflow-hidden">
-        <div className="absolute inset-0 bg-background" />
-        {/* Animated Background Elements */}
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-[128px]" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent/20 rounded-full blur-[128px]" />
-        
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-          >
-            <div className="inline-flex items-center space-x-2 bg-surface/80 border border-white/10 rounded-full px-4 py-2 mb-8 backdrop-blur-sm">
-              <span className="flex h-2 w-2 rounded-full bg-secondary animate-pulse"></span>
-              <span className="text-sm font-medium text-textMuted">OpenRouter AI Mesh Network Live</span>
-            </div>
-            
-            <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-8">
-              Validate your startup idea<br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-blue-400 to-accent">
-                in minutes, not months.
-              </span>
-            </h1>
-            
-            <p className="text-xl md:text-2xl text-textMuted max-w-3xl mx-auto mb-12">
-              Our Multi-Agent AI system conducts deep market research, analyzes competitors, and evaluates target audiences to give you actionable validation data instantly.
-            </p>
-            
-            <div className="flex flex-col sm:flex-row justify-center items-center space-y-4 sm:space-y-0 sm:space-x-6">
-              <Link
-                to="/validate"
-                className="group relative inline-flex items-center justify-center px-8 py-4 text-lg font-bold text-white transition-all duration-200 bg-primary rounded-full hover:bg-primaryDark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary shadow-[0_0_20px_rgba(59,130,246,0.4)] hover:shadow-[0_0_40px_rgba(59,130,246,0.6)]"
-              >
-                Start Free Analysis
-                <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-              </Link>
-              <Link
-                to="/about"
-                className="px-8 py-4 text-lg font-bold text-white transition-all duration-200 bg-surface border border-white/10 rounded-full hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-white/20"
-              >
-                How it works
-              </Link>
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* Features Section */}
-      <section className="py-24 bg-surface/50 border-t border-white/5 relative z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Enterprise-Grade Validation</h2>
-            <p className="text-lg text-textMuted max-w-2xl mx-auto">
-              Our P2P Mesh Network of specialized AI agents works concurrently to provide comprehensive analysis.
-            </p>
+    <div className="relative min-h-[calc(100vh-4rem)] flex flex-col items-center justify-start overflow-x-hidden pt-8 pb-16">
+      {/* Background elements */}
+      <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden bg-background">
+        <motion.div 
+          animate={{ rotate: 360 }}
+          transition={{ duration: 150, repeat: Infinity, ease: "linear" }}
+          className="absolute top-[-20%] left-[10%] w-[800px] h-[800px] bg-primary/5 rounded-full blur-[120px] opacity-60" 
+        />
+        <motion.div 
+          animate={{ rotate: -360 }}
+          transition={{ duration: 200, repeat: Infinity, ease: "linear" }}
+          className="absolute top-[30%] right-[-10%] w-[600px] h-[600px] bg-blue-500/5 rounded-full blur-[100px] opacity-40" 
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_80%_80%_at_50%_0%,#000_60%,transparent_100%)]" />
+      </div>
+      
+      {/* 1. Increased maximum content width to 1440px for large desktop screens */}
+      <div className="relative z-10 w-full max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 text-center mt-8 sm:mt-12">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          className="space-y-8"
+        >
+          {/* Badge */}
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-surface/80 border border-white/10 backdrop-blur-md shadow-xl text-primary text-sm font-semibold mb-2">
+            <Sparkles className="w-4 h-4" />
+            <span>VentureLens AI Version 2.0</span>
           </div>
+          
+          <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-white mb-6 leading-[1.1]">
+            Know if your startup is <br className="hidden sm:block" />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-primary to-blue-400">
+              worth building.
+            </span>
+          </h1>
+          
+          <p className="text-lg sm:text-xl text-textMuted max-w-3xl mx-auto font-medium leading-relaxed">
+            Deploy an intelligent swarm of AI agents to gain evidence-backed confidence, real-time market validation, and data-driven decision making before writing a single line of code.
+          </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {[
-              { icon: BrainCircuit, title: 'Multi-Agent AI', desc: '5 specialized agents work in a mesh network for perfect data synthesis.' },
-              { icon: Target, title: 'Market Sizing', desc: 'Real-time extraction of TAM, SAM, SOM and industry growth rates.' },
-              { icon: TrendingUp, title: 'Competitor Matrix', desc: 'Detailed feature comparison and weakness identification of rivals.' },
-              { icon: ShieldCheck, title: 'Guardrail Secured', desc: 'Strict anti-hallucination systems verify every fact against live search data.' },
-            ].map((feature, idx) => (
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: idx * 0.1 }}
-                className="glass-panel p-6 rounded-2xl hover:bg-surface transition-colors"
-              >
-                <div className="bg-primary/10 w-12 h-12 rounded-xl flex items-center justify-center mb-6">
-                  <feature.icon className="h-6 w-6 text-primary" />
+          {/* 3. Significantly increased textarea width for dominance */}
+          <form onSubmit={submitForm} className="relative max-w-5xl xl:max-w-6xl mx-auto mt-14 text-left">
+            {/* Glow behind textarea */}
+            <div className={`absolute -inset-1 rounded-3xl blur-xl transition-all duration-500 ${isFocused ? 'bg-primary/20 opacity-100' : 'opacity-0'}`} />
+            
+            <div className={`relative rounded-2xl transition-all duration-500 ${isFocused ? 'border-primary/50 bg-surface/90 shadow-[0_8px_32px_rgba(0,0,0,0.5)]' : 'border-white/10 bg-surface/60 shadow-2xl'} border backdrop-blur-2xl overflow-hidden`}>
+              
+              <div className="p-1 relative">
+                {/* Floating Label / AI Icon */}
+                <div className="absolute top-6 left-6 text-primary flex items-center gap-2 pointer-events-none opacity-80">
+                  <Sparkles className="w-5 h-5" />
+                  {!idea && <span className="text-lg sm:text-xl font-medium tracking-wide text-textMuted/70">Describe your startup concept, target audience, and core features...</span>}
                 </div>
-                <h3 className="text-xl font-semibold mb-3">{feature.title}</h3>
-                <p className="text-textMuted leading-relaxed">{feature.desc}</p>
-              </motion.div>
+
+                <textarea
+                  ref={textareaRef}
+                  value={idea}
+                  onChange={(e) => setIdea(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                      submitForm(e);
+                    }
+                  }}
+                  onFocus={() => setIsFocused(true)}
+                  onBlur={() => setIsFocused(false)}
+                  className="w-full bg-transparent text-white resize-none outline-none p-6 pt-12 text-lg sm:text-xl font-medium leading-relaxed min-h-[160px] transition-all duration-200 overflow-hidden relative z-10 placeholder-transparent focus:ring-0"
+                  maxLength={1000}
+                  required
+                  disabled={isLoading}
+                />
+              </div>
+
+              <AnimatePresence>
+                {error && (
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="px-6 sm:px-8 pb-4">
+                    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-sm text-red-400 font-medium">
+                      {error}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Footer of Textarea */}
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-4 px-6 pb-6 pt-4 border-t border-white/5 bg-black/20">
+                
+                <div className="flex flex-col gap-1 w-full sm:w-auto text-center sm:text-left">
+                  <span className={`text-xs font-medium ${idea.length > 900 ? 'text-warning' : 'text-textMuted'}`}>
+                    {idea.length} <span className="opacity-40">/ 1000 characters</span>
+                  </span>
+                  <span className="hidden sm:inline text-[11px] text-textMuted/40 font-mono tracking-widest uppercase mt-0.5">
+                    Press ⌘ ↵ to analyze
+                  </span>
+                </div>
+                
+                <button
+                  type="submit"
+                  disabled={idea.trim().length < 10 || isLoading}
+                  className="relative group w-full sm:w-auto overflow-hidden inline-flex items-center justify-center gap-2 bg-white text-background hover:bg-gray-100 disabled:bg-surface disabled:text-textMuted disabled:cursor-not-allowed px-8 py-3.5 rounded-xl font-bold transition-all duration-300 shadow-md hover:shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:shadow-none"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span>Analyzing Market...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="relative z-10">Analyze My Startup</span>
+                      <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform relative z-10" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </form>
+
+          {/* Value Preview */}
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
+            className="mt-8 flex flex-wrap justify-center gap-x-8 gap-y-3 text-sm text-textMuted font-medium"
+          >
+            {VALUE_PREVIEW.map((val, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-primary/70" />
+                <span>{val}</span>
+              </div>
+            ))}
+          </motion.div>
+
+          {/* 4. Smart Suggestions - Expanded width and gap */}
+          <div className="mt-16 text-left max-w-5xl xl:max-w-6xl mx-auto">
+            <p className="text-sm font-semibold text-textMuted tracking-wider uppercase mb-6 pl-1">Or start with a proven example</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
+              {SUGGESTIONS.map((s, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => { setIdea(s.desc); setIsFocused(true); }}
+                  disabled={isLoading}
+                  className="group text-left p-6 rounded-2xl bg-surface/30 border border-white/5 hover:bg-surface/50 hover:border-primary/30 hover:-translate-y-1 transition-all duration-300 relative overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-primary shadow-sm hover:shadow-lg"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <div className="relative z-10">
+                    <div className="flex items-center gap-2 mb-4">
+                      <span className="text-[10px] uppercase tracking-widest text-primary font-bold px-2.5 py-1 rounded-sm bg-primary/10">{s.industry}</span>
+                    </div>
+                    <h4 className="text-white font-semibold mb-2 group-hover:text-primary transition-colors">{s.title}</h4>
+                    <p className="text-sm text-textMuted leading-relaxed">{s.desc}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+
+        {/* 7 & 8. Trust Section - Distribute width and reduce vertical margin */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          className="mt-20 lg:mt-24 pt-10 border-t border-white/5 max-w-6xl xl:max-w-7xl mx-auto"
+        >
+          <p className="text-center text-sm font-semibold text-textMuted tracking-widest uppercase mb-10">Powered By Enterprise-Grade Technology</p>
+          <div className="flex flex-wrap justify-center lg:justify-between gap-x-10 gap-y-8 opacity-70 px-4 xl:px-8">
+            {TRUST_ITEMS.map((item, i) => (
+              <div key={i} className="flex items-center gap-2.5 text-white font-medium text-sm sm:text-base">
+                <ShieldCheck className="w-5 h-5 text-textMuted" />
+                <span>{item}</span>
+              </div>
             ))}
           </div>
-        </div>
-      </section>
+        </motion.div>
+
+        {/* 5. AI Capabilities - Increase grid width and gaps */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.4, ease: [0.16, 1, 0.3, 1] }}
+          className="mt-20 lg:mt-24 w-full max-w-6xl xl:max-w-7xl mx-auto text-left"
+        >
+          <div className="text-center mb-16">
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">Comprehensive AI Intelligence</h2>
+            <p className="text-textMuted text-lg max-w-2xl mx-auto">Four specialized AI agents analyze your idea from every angle, delivering a complete validation report in seconds.</p>
+          </div>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 xl:gap-10">
+            {CAPABILITIES.map((cap, i) => (
+              <div key={i} className="p-8 rounded-3xl bg-surface/40 border border-white/5 hover:border-primary/20 hover:bg-surface/60 transition-all duration-300 shadow-sm hover:shadow-md flex flex-col sm:flex-row gap-6 items-start">
+                <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0 text-white shadow-inner">
+                  <cap.icon className="w-7 h-7" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white mb-3">{cap.title}</h3>
+                  <p className="text-textMuted leading-relaxed">{cap.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+
+        {/* 6. How It Works Timeline - Extended max-width */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          className="mt-20 lg:mt-24 mb-8 w-full max-w-6xl xl:max-w-7xl mx-auto"
+        >
+          <div className="text-center mb-20">
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">How it works</h2>
+            <p className="text-textMuted text-lg max-w-2xl mx-auto">A seamless, automated pipeline from idea to validation.</p>
+          </div>
+          
+          <div className="flex flex-col md:flex-row justify-between relative px-4">
+            {/* Desktop Connector Line */}
+            <div className="hidden md:block absolute top-[28px] left-[10%] right-[10%] h-[2px] bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+            
+            {FLOW_STEPS.map((step, i) => (
+              <div key={i} className="relative z-10 flex flex-col items-center text-center flex-1 mb-12 md:mb-0">
+                <div className="w-14 h-14 rounded-full bg-surface border-4 border-background flex items-center justify-center text-primary mb-5 shadow-[0_0_20px_rgba(var(--color-primary),0.15)]">
+                  <step.icon className="w-6 h-6" />
+                </div>
+                <h4 className="text-white font-bold mb-2">{step.title}</h4>
+                <p className="text-sm text-textMuted max-w-[140px] mx-auto">{step.desc}</p>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+
+      </div>
     </div>
   );
 };
