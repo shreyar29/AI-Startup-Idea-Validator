@@ -3,7 +3,7 @@ from pydantic import BaseModel
 import bcrypt
 import jwt
 from datetime import datetime, timedelta
-import os
+from core.config import settings
 from db import get_db
 from utils.logger import get_logger
 
@@ -11,7 +11,7 @@ logger = get_logger(__name__)
 
 router = APIRouter()
 
-SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
+SECRET_KEY = settings.app.SECRET_KEY
 ALGORITHM = "HS256"
 
 class UserCredentials(BaseModel):

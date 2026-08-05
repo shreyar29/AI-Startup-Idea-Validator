@@ -10,14 +10,17 @@ understanding and query generation to the LLM.
 from __future__ import annotations
 
 import json
+import asyncio
+import random
 from typing import Any
 from datetime import datetime, timezone
 
 from strategy.query_prompt import SYSTEM_PROMPT
 from strategy.query_rules import validate_startup_idea, SEARCH_CATEGORIES
-from llm.openrouter_client import OpenRouterClient
+from llm.gemini_client import GeminiClient
 from utils.logger import get_logger
-from utils.error_handler import LLMResponseError, QueryStrategistError, safe_parse_llm_json
+from utils.error_handler import LLMResponseError, QueryStrategistError, safe_parse_llm_json, MalformedLLMOutputError
+from core.config import settings
 
 logger = get_logger(__name__)
 
@@ -28,13 +31,15 @@ REQUIRED_CONTEXT_FIELDS = (
     "technology",
 )
 
+EXPECTED_TOP_LEVEL_KEYS = {"identified_context", "queries", "_parse_metrics"}
+
 
 class QueryStrategist:
     """
     Converts a startup idea into categorized search queries.
     """
 
-    def __init__(self, llm_client: OpenRouterClient) -> None:
+    def __init__(self, llm_client: GeminiClient) -> None:
         self._llm_client = llm_client
 
     async def run(self, input_data: dict[str, Any]) -> dict[str, Any]:
@@ -54,39 +59,98 @@ class QueryStrategist:
         logger.info("Query Strategist starting for idea.")
         cleaned_idea = self._validate_input(startup_idea)
 
-        max_retries = 2
+        max_retries = settings.agent.QUERY_STRATEGIST_MAX_RETRIES
         raw_response = ""
+        last_error = "Unknown error"
 
         for attempt in range(max_retries + 1):
             if attempt == 0:
                 current_system = SYSTEM_PROMPT
-                current_user = cleaned_idea
+                current_user = f"<startup_idea>\n{cleaned_idea}\n</startup_idea>"
             else:
                 logger.warning("Retry attempt %d for Query Strategist", attempt)
-                current_system = "You are a JSON fixer. Return ONLY valid JSON."
+                current_system = (
+                    "You are a schema-aware JSON repair agent. Your previous response failed schema validation. "
+                    "Return ONLY valid JSON enforcing the exact schema (identified_context, queries). "
+                    "Preserve the original meaning exactly. Do not invent facts. Repair both syntax and structure."
+                )
                 current_user = (
-                    "Your previous response was invalid JSON. Return ONLY corrected "
-                    "valid JSON without changing the meaning.\n\n"
+                    "Your previous response failed schema validation. Return ONLY corrected valid JSON.\n\n"
+                    "exact required schema: {\"identified_context\": {\"product\": \"...\", \"industry\": \"...\", \"target_audience\": \"...\", \"technology\": \"...\"}, \"queries\": {\"category_name\": [\"query1\", \"query2\"]}}\n"
+                    "required keys: 'identified_context', 'queries'\n"
+                    "prohibited keys: Any other top-level keys\n"
+                    "output rules: Return ONLY valid JSON without markdown formatting or code blocks.\n\n"
                     f"Invalid JSON:\n{raw_response}"
                 )
 
             try:
                 raw_response = await self._call_llm(current_system, current_user)
-                parsed_response = safe_parse_llm_json(raw_response)
-                self._validate_response_structure(parsed_response)
+                
+                safe_log_response = raw_response if len(raw_response) <= 5000 else raw_response[:2500] + "\n...[TRUNCATED]...\n" + raw_response[-2500:]
+                logger.debug("\n========== RAW GEMINI RESPONSE ==========\n%s\n=========================================", safe_log_response)
+
+                parsed_response = safe_parse_llm_json(
+                    raw_response,
+                    required_keys=["identified_context", "queries"],
+                    retry_attempt=attempt
+                )
+                
+                parse_metrics = parsed_response.pop("_parse_metrics", {})
+                repaired_fields = self._validate_response_structure(parsed_response, cleaned_idea)
+                
+                schema_valid = len(repaired_fields) == 0
+                
+                if repaired_fields:
+                    logger.info("Repaired fields during validation: %s", repaired_fields)
                 
                 parsed_response["metadata"] = {
                     "agent": "QueryStrategist",
                     "status": "success",
-                    "timestamp": datetime.now(timezone.utc).isoformat()
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "raw_parse_success": parse_metrics.get("raw_parse_success", True),
+                    "json_repair_used": parse_metrics.get("json_repair_used", False),
+                    "schema_valid": schema_valid,
+                    "validation_repairs": repaired_fields,
+                    "retry_attempt": attempt
                 }
-                logger.info("Query Strategist completed successfully.")
+                logger.info("Query Strategist completed successfully after %d retries.", attempt)
                 return parsed_response 
+            except MalformedLLMOutputError as exc:
+                logger.warning("Query Strategist attempt %d experienced validation failure: %s", attempt, exc)
+                last_error = str(exc)
+                if attempt < max_retries:
+                    sleep_time = 1.0 * (2 ** attempt) + random.uniform(0, 1)
+                    logger.warning("Backing off for %.1fs before next validation repair attempt.", sleep_time)
+                    await asyncio.sleep(sleep_time)
+            except LLMResponseError as exc:
+                logger.error("Query Strategist encountered permanent API failure: %s", exc)
+                last_error = str(exc)
+                break
             except Exception as exc:
-                logger.warning("Query Strategist attempt %d failed: %s", attempt, exc)
-                if attempt == max_retries:
-                    logger.error("All retries failed for Query Strategist.")
-                    raise QueryStrategistError("Failed to generate valid queries after multiple attempts.") from exc
+                logger.error("Query Strategist encountered permanent failure: %s", exc)
+                last_error = str(exc)
+                break
+
+        logger.error("Query Strategist activating fallback mode. Reason: %s", last_error)
+        return {
+            "metadata": {
+                "agent": "QueryStrategist",
+                "status": "degraded",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "error": last_error,
+                "degraded_mode_reason": "Exhausted retries or encountered permanent error."
+            },
+            "identified_context": {
+                "product": cleaned_idea[:100],
+                "industry": "Unknown",
+                "target_audience": "Unknown",
+                "technology": "Unknown"
+            },
+            "queries": {
+                category: [f"{cleaned_idea[:50]} {category.replace('_', ' ')}"] 
+                for category in SEARCH_CATEGORIES
+            }
+        }
 
     def _validate_input(self, startup_idea: str) -> str:
         try:
@@ -101,23 +165,78 @@ class QueryStrategist:
             response_text = await self._llm_client.generate_response(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
+                temperature=0.0
             )
             return response_text
         except Exception as exc:
             logger.exception("LLM call failed.")
             raise LLMResponseError("LLM call failed") from exc
 
-    def _validate_response_structure(self, parsed: dict[str, Any]) -> None:
-        if "identified_context" not in parsed or "queries" not in parsed:
-            raise LLMResponseError("Missing 'identified_context' or 'queries'")
+    def _validate_response_structure(self, parsed: dict[str, Any], startup_idea: str) -> list[str]:
+        repaired_fields = []
         
+        for key in list(parsed.keys()):
+            if key not in EXPECTED_TOP_LEVEL_KEYS:
+                logger.info("Pruning extraneous top-level key: %s", key)
+                del parsed[key]
+                repaired_fields.append(f"pruned_key.{key}")
+
+        if "identified_context" not in parsed or not isinstance(parsed["identified_context"], dict):
+            logger.warning("Missing required key 'identified_context' before validation injects defaults.")
+            parsed["identified_context"] = {}
+            repaired_fields.append("identified_context")
+        if "queries" not in parsed or not isinstance(parsed["queries"], dict):
+            logger.warning("Missing required key 'queries' before validation injects defaults.")
+            parsed["queries"] = {}
+            repaired_fields.append("queries")
+            
         context = parsed["identified_context"]
         for field in REQUIRED_CONTEXT_FIELDS:
-            if field not in context:
-                raise LLMResponseError(f"Missing context field: {field}")
+            val = context.get(field)
+            if not isinstance(val, str) or not val.strip() or val.strip().lower() in ["n/a", "none", "null"]:
+                if field not in context:
+                    logger.warning("Missing schema key: context.%s before validation injects defaults.", field)
+                else:
+                    logger.warning("Invalid or empty schema key: context.%s before validation injects defaults.", field)
+                context[field] = "Unknown"
+                repaired_fields.append(f"context.{field}")
+            else:
+                context[field] = val.strip()
                 
         queries = parsed["queries"]
+        seen_queries = set()
         for category in SEARCH_CATEGORIES:
-            if category not in queries:
-                raise LLMResponseError(f"Missing query category: {category}")
+            cat_queries = queries.get(category)
+            
+            if not isinstance(cat_queries, list) or not cat_queries:
+                logger.warning("Missing or empty array for: queries.%s before validation injects defaults.", category)
+                queries[category] = [f"{startup_idea[:50]} {category.replace('_', ' ')}"]
+                repaired_fields.append(f"queries.{category}")
+                seen_queries.add(queries[category][0].lower())
+                continue
+            
+            first_query = cat_queries[0]
+            if not isinstance(first_query, str) or not first_query.strip():
+                logger.warning("Invalid query string in: queries.%s before validation injects defaults.", category)
+                queries[category] = [f"{startup_idea[:50]} {category.replace('_', ' ')}"]
+                repaired_fields.append(f"queries.{category}_type_repair")
+                seen_queries.add(queries[category][0].lower())
+                continue
+                
+            clean_query = first_query.strip()
+            
+            query_lower = clean_query.lower()
+            if query_lower in seen_queries:
+                logger.warning("Duplicate query detected in %s. Modifying intent.", category)
+                clean_query = f"{clean_query} {category.replace('_', ' ')}"
+                repaired_fields.append(f"queries.{category}_dedupe")
+                seen_queries.add(clean_query.lower())
+            else:
+                seen_queries.add(query_lower)
+                
+            queries[category] = [clean_query]
+            if len(cat_queries) > 1:
+                repaired_fields.append(f"queries.{category}_truncated")
+                
+        return repaired_fields

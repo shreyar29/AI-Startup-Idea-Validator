@@ -189,7 +189,7 @@ def flag_low_confidence_if_vague(startup_idea, min_word_count=4):
     return word_count < min_word_count
 
 
-def safe_parse_llm_json(raw_text, required_keys=None):
+def safe_parse_llm_json(raw_text, required_keys=None, retry_attempt=0):
     """
     Mitigates malformed LLM output during structured extraction (e.g. the
     Query Strategist converting a startup idea into structured queries, or
@@ -204,6 +204,9 @@ def safe_parse_llm_json(raw_text, required_keys=None):
     import json
     import json_repair
 
+    raw_parse_success = True
+    json_repair_used = False
+
     cleaned = raw_text.strip()
     if cleaned.startswith("```"):
         cleaned = cleaned.strip("`")
@@ -214,11 +217,22 @@ def safe_parse_llm_json(raw_text, required_keys=None):
     try:
         parsed = json.loads(cleaned)
     except (json.JSONDecodeError, TypeError) as exc:
+        raw_parse_success = False
+        raw_len = len(raw_text)
+        first_500 = raw_text[:500]
+        last_500 = raw_text[-500:] if raw_len > 500 else ""
+        logger.warning("JSON Parse failed. Length: %d, Retry: %d, Exception: %s", raw_len, retry_attempt, exc)
+        logger.warning("First 500 chars: %s", first_500)
+        logger.warning("Last 500 chars: %s", last_500)
         logger.warning(f"Standard JSON decode failed: {exc}. Attempting automatic repair.")
         try:
             # Fallback to the json-repair library which handles missing commas, unescaped quotes, etc.
-            repaired_str = json_repair.repair_json(cleaned)
-            parsed = json.loads(repaired_str)
+            repaired = json_repair.repair_json(cleaned, return_objects=True)
+            if isinstance(repaired, str):
+                parsed = json.loads(repaired)
+            else:
+                parsed = repaired
+            json_repair_used = True
             logger.info("Automatic JSON repair succeeded.")
         except Exception as repair_exc:
             raise MalformedLLMOutputError(f"Could not parse or repair LLM output as JSON: {exc} | Repair error: {repair_exc}")
@@ -240,6 +254,10 @@ def safe_parse_llm_json(raw_text, required_keys=None):
                 f"LLM output missing required keys: {missing}"
             )
 
+    parsed["_parse_metrics"] = {
+        "raw_parse_success": raw_parse_success,
+        "json_repair_used": json_repair_used,
+    }
     return parsed
 
 

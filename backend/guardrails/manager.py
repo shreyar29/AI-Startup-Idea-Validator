@@ -1,28 +1,42 @@
-import os
 import re
 import json
 import logging
+import hashlib
+import contextvars
+from dataclasses import dataclass, field
 from typing import Any, Dict, List
+from utils.logger import get_logger
+from core.config import settings
 
-logger = logging.getLogger("guardrails")
+logger = get_logger("guardrails")
 
-# Configurable Thresholds
-MIN_QUERY_LENGTH = int(os.getenv("GUARDRAIL_MIN_QUERY_LENGTH", "5"))
-MAX_QUERY_LENGTH = int(os.getenv("GUARDRAIL_MAX_QUERY_LENGTH", "150"))
-MIN_CONTENT_LENGTH = int(os.getenv("GUARDRAIL_MIN_CONTENT_LENGTH", "50"))
-MAX_CONTENT_LENGTH = int(os.getenv("GUARDRAIL_MAX_CONTENT_LENGTH", "20000"))
-NUMERIC_TOLERANCE = float(os.getenv("GUARDRAIL_NUMERIC_TOLERANCE", "0.03"))
-TRUSTED_DOMAINS = [d.strip().lower() for d in os.getenv("TRUSTED_DOMAINS", "gartner.com,mckinsey.com,statista.com,forrester.com,bloomberg.com").split(",") if d.strip()]
+# 4. Group thresholds into a small immutable dataclass
+@dataclass(frozen=True)
+class GuardrailConfig:
+    min_query_length: int = settings.guardrails.GUARDRAIL_MIN_QUERY_LENGTH
+    max_query_length: int = settings.guardrails.GUARDRAIL_MAX_QUERY_LENGTH
+    min_content_length: int = settings.guardrails.GUARDRAIL_MIN_CONTENT_LENGTH
+    max_content_length: int = settings.guardrails.GUARDRAIL_MAX_CONTENT_LENGTH
+    numeric_tolerance: float = settings.guardrails.GUARDRAIL_NUMERIC_TOLERANCE
+    trusted_domains: list = field(default_factory=lambda: settings.guardrails.trusted_domains_list)
 
-class GuardrailManager:
-    """
-    Redesigned Guardrail Manager providing production-ready, highly accurate,
-    and non-destructive validation for the AI Startup Idea Validator.
-    Implements factual verification, semantic numeric matching, and hallucination prevention
-    without aggressively deleting valid information.
-    """
-    
-    _overall_metrics = {
+CONFIG = GuardrailConfig()
+
+# 3. Compile all regular expressions once at module initialization
+MALICIOUS_PATTERNS = [
+    re.compile(r"(?i)\bignore\b.*\bprevious\b.*\binstructions\b"),
+    re.compile(r"(?i)system\s+prompt"),
+    re.compile(r"(?i)bypass\s+restrictions"),
+    re.compile(r"<script.*?>"),
+    re.compile(r"(?i)\bdrop\s+table\b")
+]
+QUERY_CLEAN_PATTERN = re.compile(r'[^\w\s\-\.\?]')
+NUMBER_EXTRACTION_PATTERN = re.compile(r'(?i)(?:\$|usd|€|£)?\s*(\d+(?:\.\d+)?)\s*\b(b|m|k|billion|million|%)\b|(?:\$|usd|€|£)?\s*(\d+(?:\.\d+)?)\b')
+
+# 1. Thread-safe metrics using ContextVar for request-scoped isolation
+@dataclass
+class GuardrailMetrics:
+    overall: Dict[str, int] = field(default_factory=lambda: {
         "verified_facts": 0,
         "derived_facts": 0,
         "inferred_facts": 0,
@@ -31,14 +45,33 @@ class GuardrailManager:
         "corrected_fields": 0,
         "duplicate_sections_removed": 0,
         "contradictions_detected": 0
-    }
-    
-    _agent_metrics = {}
+    })
+    agent: Dict[str, Dict[str, int]] = field(default_factory=dict)
+
+_metrics_var: contextvars.ContextVar[GuardrailMetrics] = contextvars.ContextVar("guardrail_metrics")
+
+def _get_metrics() -> GuardrailMetrics:
+    try:
+        return _metrics_var.get()
+    except LookupError:
+        m = GuardrailMetrics()
+        _metrics_var.set(m)
+        return m
+
+
+class GuardrailManager:
+    """
+    Redesigned Guardrail Manager providing production-ready, highly accurate,
+    and non-destructive validation for the AI Startup Idea Validator.
+    Implements factual verification, semantic numeric matching, and hallucination prevention
+    without aggressively deleting valid information.
+    """
 
     @classmethod
     def _init_agent_metrics(cls, agent_name: str):
-        if agent_name not in cls._agent_metrics:
-            cls._agent_metrics[agent_name] = {
+        metrics = _get_metrics()
+        if agent_name not in metrics.agent:
+            metrics.agent[agent_name] = {
                 "verified_facts": 0,
                 "inferred_facts": 0,
                 "removed_facts": 0,
@@ -48,18 +81,17 @@ class GuardrailManager:
 
     @classmethod
     def _increment_metric(cls, agent_name: str, metric: str, amount: int = 1):
+        metrics = _get_metrics()
         if agent_name:
             cls._init_agent_metrics(agent_name)
-            if metric in cls._agent_metrics.get(agent_name, {}):
-                cls._agent_metrics[agent_name][metric] += amount
-        if metric in cls._overall_metrics:
-            cls._overall_metrics[metric] += amount
+            if metric in metrics.agent.get(agent_name, {}):
+                metrics.agent[agent_name][metric] += amount
+        if metric in metrics.overall:
+            metrics.overall[metric] += amount
 
     @classmethod
     def _reset_metrics(cls):
-        for k in cls._overall_metrics:
-            cls._overall_metrics[k] = 0
-        cls._agent_metrics.clear()
+        _metrics_var.set(GuardrailMetrics())
 
     @staticmethod
     def validate_input(query: str) -> str:
@@ -73,16 +105,8 @@ class GuardrailManager:
         if len(clean_query) > 1500:
             raise ValueError("Input Guardrail Triggered: Startup idea is too long. Please summarize it.")
             
-        malicious_patterns = [
-            r"(?i)\bignore\b.*\bprevious\b.*\binstructions\b",
-            r"(?i)system\s+prompt",
-            r"(?i)bypass\s+restrictions",
-            r"<script.*?>",
-            r"(?i)\bdrop\s+table\b"
-        ]
-        
-        for pattern in malicious_patterns:
-            if re.search(pattern, clean_query):
+        for pattern in MALICIOUS_PATTERNS:
+            if pattern.search(clean_query):
                 logger.warning(f"Input Guardrail blocked malicious prompt attempt.")
                 raise ValueError("Input Guardrail Triggered: Disallowed content detected in prompt.")
                 
@@ -97,8 +121,8 @@ class GuardrailManager:
             valid_queries = []
             for q in query_list:
                 q_clean = q.strip()
-                q_clean = re.sub(r'[^\w\s\-\.\?]', '', q_clean)
-                if MIN_QUERY_LENGTH <= len(q_clean) <= MAX_QUERY_LENGTH:
+                q_clean = QUERY_CLEAN_PATTERN.sub('', q_clean)
+                if CONFIG.min_query_length <= len(q_clean) <= CONFIG.max_query_length:
                     valid_queries.append(q_clean)
             
             if valid_queries:
@@ -132,10 +156,11 @@ class GuardrailManager:
                 if not url or url in global_seen_urls:
                     continue
                     
-                if len(content) < MIN_CONTENT_LENGTH or len(content) > MAX_CONTENT_LENGTH:
+                if len(content) < CONFIG.min_content_length or len(content) > CONFIG.max_content_length:
                     continue
                     
-                snippet_hash = hash(content[:250].lower())
+                # 2. Deterministic hashing for deduplication
+                snippet_hash = hashlib.sha256(content[:250].lower().encode('utf-8')).hexdigest()
                 if snippet_hash in global_seen_snippets:
                     continue
                     
@@ -153,7 +178,7 @@ class GuardrailManager:
                             score += 1
                             
                 # Boost trusted domains
-                if any(td in url.lower() for td in TRUSTED_DOMAINS):
+                if any(td in url.lower() for td in CONFIG.trusted_domains):
                     score += 5
                     
                 item["_relevance"] = score
@@ -208,9 +233,7 @@ class GuardrailManager:
     @classmethod
     def _extract_numbers(cls, text: str) -> List[float]:
         """Robust semantic extraction of numbers from string, factoring in abbreviations (B, M, K, %)."""
-        # Matches formats like: $29, 29 USD, 1.4B, 1.4 Billion, 1400 million, 7.8%
-        pattern = r'(?i)(?:\$|usd|€|£)?\s*(\d+(?:\.\d+)?)\s*\b(b|m|k|billion|million|%)\b|(?:\$|usd|€|£)?\s*(\d+(?:\.\d+)?)\b'
-        matches = re.findall(pattern, text)
+        matches = NUMBER_EXTRACTION_PATTERN.findall(text)
         nums = []
         for m in matches:
             val_str = m[0] or m[2]
@@ -245,7 +268,7 @@ class GuardrailManager:
         ctx_text_lower = "\n".join(ctx_text_list).lower()
         ctx_numbers = cls._extract_numbers(ctx_text_lower)
 
-        def check_number_in_context(num: float, tolerance=NUMERIC_TOLERANCE) -> bool:
+        def check_number_in_context(num: float, tolerance=CONFIG.numeric_tolerance) -> bool:
             for cnum in ctx_numbers:
                 if cnum == 0 and num == 0: return True
                 if cnum != 0 and abs(cnum - num) / abs(cnum) <= tolerance: return True
@@ -315,7 +338,8 @@ class GuardrailManager:
 
         verified_output = {k: process_value(k, v) for k, v in agent_output.items()}
         
-        agent_mets = cls._agent_metrics[agent_name]
+        metrics = _get_metrics()
+        agent_mets = metrics.agent[agent_name]
         total_facts = agent_mets["verified_facts"] + agent_mets["inferred_facts"] + agent_mets["removed_facts"]
         conf = 0.94
         if total_facts > 0:
@@ -411,8 +435,9 @@ class GuardrailManager:
         avg_conf = sum(conf_scores) / len(conf_scores) if conf_scores else 0.92
 
         # Snapshot metrics for this request, then reset for next request
-        report_overall = dict(cls._overall_metrics)
-        report_agents = {k: dict(v) for k, v in cls._agent_metrics.items()}
+        metrics = _get_metrics()
+        report_overall = dict(metrics.overall)
+        report_agents = {k: dict(v) for k, v in metrics.agent.items()}
 
         response["guardrail_report"] = {
             "overall_metrics": report_overall,

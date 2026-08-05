@@ -11,7 +11,8 @@ Synthesizes raw search results into structured customer insights
 import asyncio
 import logging
 import json
-import os
+from typing import Dict, Any, List
+from core.config import settings
 from datetime import datetime, timezone
 from typing import Any
 
@@ -33,6 +34,7 @@ class CustomerAgent:
         self.llm_client = llm_client
         self.peers = {}
         self._analysis_task = None
+        self.status = "idle"
 
     def connect_peers(self, peers: dict):
         """Connects this agent to all other agents in the mesh."""
@@ -49,14 +51,22 @@ class CustomerAgent:
 
     async def _perform_analysis(self):
         """Pulls required data from peers and runs the analysis."""
-        logger.info("CustomerAgent: Awaiting research payload from Web Search Agent.")
-        if "web_search" in self.peers:
-            research_data = await self.peers["web_search"].get_analysis()
-            self.context["research"] = research_data
-            logger.info("CustomerAgent: Successfully received research payload.")
-            
-        result = await self.analyze()
-        return result
+        self.status = "started"
+        try:
+            logger.info("CustomerAgent: Awaiting research payload from Web Search Agent.")
+            if "web_search" in self.peers:
+                research_data = await self.peers["web_search"].get_analysis()
+                self.context["research"] = research_data
+                logger.info("CustomerAgent: Successfully received research payload.")
+                
+            result = await self.analyze()
+            return result
+        except asyncio.TimeoutError:
+            self.status = "timeout"
+            raise
+        except Exception:
+            self.status = "failed"
+            raise
 
     def _validate_and_coerce_list(self, val: Any) -> list:
         """Helper to ensure a value is strictly a list of strings."""
@@ -94,6 +104,7 @@ class CustomerAgent:
                         snippets.append(content)
                         
         if not snippets:
+            self.status = "failed"
             logger.warning("CustomerAgent: No research snippets found. Returning degraded output.")
             analysis = {
                 "target_customer_segments": [],
@@ -104,6 +115,7 @@ class CustomerAgent:
                 "sentiment": {"overall_sentiment": "Unknown", "positive_factors": [], "negative_factors": []},
                 "feature_demand": [],
                 "customer_validation_metrics": {"validation_score": 0, "confidence": "Low", "summary": "No research data available."},
+                "status": self.status,
                 "generated_at": datetime.now(timezone.utc).isoformat()
             }
             self.context["customer_analysis"] = analysis
@@ -111,9 +123,9 @@ class CustomerAgent:
             
         logger.info(f"CustomerAgent: Consolidating {len(snippets)} snippets for customer analysis.")
         
-        max_snippets = int(os.environ.get("CUSTOMER_MAX_SNIPPETS", 4))
-        max_snippet_length = int(os.environ.get("CUSTOMER_MAX_SNIPPET_LENGTH", 500))
-        timeout_seconds = int(os.environ.get("CUSTOMER_LLM_TIMEOUT", 20))
+        max_snippets = settings.agent.CUSTOMER_MAX_SNIPPETS
+        max_snippet_length = settings.agent.CUSTOMER_MAX_SNIPPET_LENGTH
+        timeout_seconds = settings.agent.CUSTOMER_LLM_TIMEOUT
         
         top_snippets = snippets[:max_snippets]
 
@@ -175,6 +187,7 @@ class CustomerAgent:
                 break # Break on network/API errors, only retry on JSON parsing failures
 
         if not parsed_analysis:
+            self.status = "timeout" if last_error == "LLM Timeout" else "failed"
             logger.error(f"Customer Segmentation Agent: All retries failed. Last error: {last_error}. Degrading gracefully.")
             parsed_analysis = {
                 "customer_validation_metrics": {
@@ -237,6 +250,9 @@ class CustomerAgent:
                         "reason": str(f.get("reason") or "No reason provided.")
                     })
 
+        if self.status not in ["failed", "timeout"]:
+            self.status = "success"
+            
         analysis = {
             "target_customer_segments": target_customer_segments,
             "customer_personas": validated_personas,
@@ -246,6 +262,7 @@ class CustomerAgent:
             "sentiment": validated_sentiment,
             "feature_demand": validated_demand,
             "customer_validation_metrics": validated_metrics,
+            "status": self.status,
             "generated_at": datetime.now(timezone.utc).isoformat()
         }
         

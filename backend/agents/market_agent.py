@@ -11,7 +11,7 @@ import asyncio
 import logging
 import json
 import time
-import os
+from core.config import settings
 import hashlib
 from datetime import datetime, timezone
 from typing import Any, Dict
@@ -145,8 +145,9 @@ class MarketOpportunityAgent:
         idea_data = self.context.get("idea") or {}
         idea = idea_data.get("description", "Unknown startup idea")
 
-        max_snippets = int(os.getenv("MARKET_MAX_SNIPPETS", "4"))
-        max_snippet_length = int(os.getenv("MARKET_MAX_SNIPPET_LENGTH", "500"))
+        # Configuration Limits
+        max_snippets = settings.agent.MARKET_MAX_SNIPPETS
+        max_snippet_length = settings.agent.MARKET_MAX_SNIPPET_LENGTH
         auth_domains = [
             "gartner.", "statista.", "mckinsey.", "grandviewresearch.", ".gov", ".edu", "forrester.", "idc.", "bloomberg.",
             "grandviewresearch.com", "mordorintelligence.com", "imarcgroup.com", "fortunebusinessinsights.com",
@@ -222,9 +223,10 @@ class MarketOpportunityAgent:
         logger.info(f"{log_prefix} Prepared LLM extraction. Snippets selected: {len(top_snippets)}, Content length: {payload_size_bytes} chars.")
 
         parsed_analysis = None
-        max_retries = int(os.getenv("MARKET_MAX_RETRIES", "1"))
+        max_retries = settings.agent.MARKET_MAX_RETRIES
+        base_backoff = 2
         last_error = None
-        timeout_seconds = int(os.getenv("MARKET_LLM_TIMEOUT", "20"))
+        timeout_seconds = settings.agent.MARKET_LLM_TIMEOUT
         llm_start = time.time()
         
         for attempt in range(max_retries + 1):
@@ -322,6 +324,7 @@ class MarketOpportunityAgent:
             confidence = "Low"
 
         # Ensure all required keys exist and enforce rigid typing to prevent downstream crashes
+        self.status = "success"
         analysis = {
             "market_size": market_size,
             "growth_rate": growth_rate,

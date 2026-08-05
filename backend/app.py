@@ -7,26 +7,82 @@ import os
 import uuid
 import time
 from typing import Callable
+from contextlib import asynccontextmanager
+
+from core.config import settings
+from core.container import container
 
 from routes.search import router as search_router
 from routes.auth import router as auth_router
 from routes.history import router as history_router
+from routes.progress import router as progress_router
 from utils.logger import get_logger
 from db import init_db
+
+# Placeholder for centralized configuration integration
+# from core.config import settings
 
 logger = get_logger(__name__)
 
 API_VERSION = "1.0.0"
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup actions
+    logger.info(f"Starting VentureLens API v{API_VERSION}...")
+    
+    # Fail fast: Validate critical dependencies at startup
+    try:
+        provider = container.get_llm_provider()
+        is_healthy = await provider.health_check()
+        if not is_healthy:
+            raise RuntimeError("LLM provider readiness verification failed.")
+        logger.info(f"Successfully validated LLM provider: {settings.llm.LLM_PROVIDER}")
+    except Exception as e:
+        logger.error(f"Startup configuration validation failed: {str(e)}")
+        raise RuntimeError(f"Startup validation failed: {str(e)}") from e
+
+    init_db()
+    logger.info("Database initialized successfully.")
+    
+    # Start ProgressManager cleanup task
+    from utils.progress import ProgressManager
+    async def cleanup_task():
+        while True:
+            await asyncio.sleep(3600)
+            await ProgressManager.cleanup_stale_sessions()
+            
+    cleaner = asyncio.create_task(cleanup_task())
+    
+    yield
+    
+    # Shutdown actions
+    cleaner.cancel()
+    logger.info("Shutting down VentureLens API gracefully...")
+    await container.shutdown()
+
 app = FastAPI(
     title="VentureLens AI Startup Validator", 
     version=API_VERSION,
-    description="Production-grade AI Multi-Agent Validator API"
+    description="Production-grade AI Multi-Agent Validator API. Provides robust multi-agent startup validation capabilities.",
+    contact={
+        "name": "VentureLens Support",
+        "url": "https://venturelens.ai/support",
+        "email": "support@venturelens.ai",
+    },
+    license_info={
+        "name": "Proprietary",
+    },
+    openapi_tags=[
+        {"name": "system", "description": "System health and status endpoints."},
+        {"name": "auth", "description": "Authentication and authorization."},
+        {"name": "history", "description": "User validation history."},
+    ],
+    lifespan=lifespan
 )
 
 # Configurable CORS instead of wildcard
-ALLOWED_ORIGINS_ENV = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173")
-ALLOWED_ORIGINS = [origin.strip() for origin in ALLOWED_ORIGINS_ENV.split(",") if origin.strip()]
+ALLOWED_ORIGINS = settings.app.allowed_origins_list
 
 app.add_middleware(
     CORSMiddleware,
@@ -58,6 +114,13 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
             response.headers["X-XSS-Protection"] = "1; mode=block"
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
             
+            # Swagger UI needs to load assets from jsdelivr
+            if not request.url.path.startswith(("/docs", "/redoc", "/openapi.json")):
+                response.headers["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'none';"
+                
+            response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+            response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+            
             logger.info(f"Request completed: {request.method} {request.url.path} - Status: {response.status_code} - Time: {process_time:.4f}s (ID: {request_id})")
             return response
         except Exception as e:
@@ -80,19 +143,12 @@ async def global_exception_handler(request: Request, exc: Exception):
         }
     )
 
-app.include_router(search_router)
+app.include_router(search_router, tags=["search"])
+app.include_router(progress_router, prefix="/api", tags=["progress"])
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(history_router, prefix="/api", tags=["history"])
 
-@app.on_event("startup")
-async def on_startup():
-    logger.info(f"Starting VentureLens API v{API_VERSION}...")
-    init_db()
-    logger.info("Database initialized successfully.")
 
-@app.on_event("shutdown")
-async def on_shutdown():
-    logger.info("Shutting down VentureLens API gracefully...")
 
 @app.get("/")
 def home():
@@ -100,12 +156,24 @@ def home():
 
 @app.get("/health", tags=["system"])
 def health_check():
+    # Core health check for liveness probes
     return {"status": "ok", "version": API_VERSION, "timestamp": time.time()}
 
 @app.get("/ready", tags=["system"])
-def readiness_check():
-    # Placeholder for DB/Service readiness checks
-    return {"status": "ready", "version": API_VERSION}
+async def readiness_check(response: Response):
+    # Enhanced readiness check prepared for dependency validation (DB, Cache, external APIs)
+    try:
+        llm_provider = container.get_llm_provider()
+        dependencies_healthy = await llm_provider.health_check()
+    except Exception as e:
+        logger.warning(f"Readiness check failed: {str(e)}")
+        dependencies_healthy = False
+    
+    if dependencies_healthy:
+        return {"status": "ready", "version": API_VERSION}
+    
+    response.status_code = 503
+    return {"status": "unavailable", "version": API_VERSION}
 
 @app.get("/api/logs/stream")
 async def stream_logs(request: Request):

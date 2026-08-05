@@ -1,6 +1,7 @@
 import logging
-import os
 import sys
+from logging.handlers import RotatingFileHandler
+from core.config import settings
 
 try:
     from rich.logging import RichHandler
@@ -9,17 +10,21 @@ try:
 except ImportError:
     RICH_AVAILABLE = False
 
+_logger_configured = False
+
 def get_logger(name: str) -> logging.Logger:
     """
     Get a structured logger for the given name.
     Handlers are configured to output cleanly formatted logs to stdout.
     """
+    global _logger_configured
     logger = logging.getLogger(name)
     
     # Configure only if it hasn't been configured yet
-    if not logger.handlers:
-        log_level = os.getenv("LOG_LEVEL", "INFO").upper()
-        logger.setLevel(getattr(logging, log_level, logging.INFO))
+    if not _logger_configured:
+        log_level = settings.app.LOG_LEVEL.upper()
+        numeric_level = getattr(logging, log_level, logging.INFO)
+        logger.setLevel(numeric_level)
         
         if RICH_AVAILABLE:
             console = Console(stderr=False)
@@ -51,5 +56,6 @@ def get_logger(name: str) -> logging.Logger:
         
         # Prevent double logging
         logger.propagate = False
+        _logger_configured = True
         
     return logger

@@ -12,11 +12,10 @@ import asyncio
 import logging
 import json
 import time
-import os
 import hashlib
 from datetime import datetime, timezone
-from typing import Any, Dict
-
+from typing import Any, Dict, List
+from core.config import settings
 from utils.error_handler import safe_parse_llm_json, MalformedLLMOutputError
 
 logger = logging.getLogger("competitor_agent")
@@ -143,8 +142,9 @@ class CompetitorAgent:
         competitor_snippets = []
         seen_hashes = set()
         
-        max_snippets = int(os.getenv("COMPETITOR_MAX_SNIPPETS", "4"))
-        max_snippet_length = int(os.getenv("COMPETITOR_MAX_SNIPPET_LENGTH", "500"))
+        # Configuration Limits
+        max_snippets = settings.agent.COMPETITOR_MAX_SNIPPETS
+        max_snippet_length = settings.agent.COMPETITOR_MAX_SNIPPET_LENGTH
         
         priority_categories = ["competitor", "alternatives", "products", "business", "startup"]
         
@@ -212,10 +212,11 @@ class CompetitorAgent:
         logger.info(f"{log_prefix} Requesting LLM extraction. Snippets: {len(top_snippets)}, Context Size: {len(raw_text)} chars (~{est_tokens} tokens).")
         
         parsed_analysis = None
-        max_retries = int(os.getenv("COMPETITOR_MAX_RETRIES", "3"))
+        max_retries = settings.agent.COMPETITOR_MAX_RETRIES
+        base_backoff = 2
         last_error = None
         llm_start = time.time()
-        timeout_seconds = int(os.getenv("COMPETITOR_LLM_TIMEOUT", "60"))
+        timeout_seconds = settings.agent.COMPETITOR_LLM_TIMEOUT
         
         for attempt in range(max_retries):
             try:
@@ -335,6 +336,7 @@ class CompetitorAgent:
             else:
                 overall_confidence = "Low"
 
+        self.status = "success"
         analysis = {
             "competitors": validated_competitors,
             "gap_analysis": self._validate_and_coerce_list(raw_gap_analysis),

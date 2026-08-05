@@ -95,18 +95,29 @@ class WebSearchAgent:
         Execute the full Web Search Agent pipeline for a given startup idea.
         """
         logger.info("Web Search Agent pipeline started. Idea: %s", startup_idea)
+        
+        request_id = self.context.get("request_id")
+        from utils.progress import ProgressManager
 
         try:
             # Stage 1: Generate Queries
+            if request_id:
+                asyncio.create_task(ProgressManager.publish(request_id, "Query Strategist", "running", "Generating intelligent search queries..."))
+                
             query_data = await self._generate_queries(startup_idea)
+            
+            if request_id:
+                asyncio.create_task(ProgressManager.publish(request_id, "Query Strategist", "completed", "Generated specialized search queries."))
             
             # Stage 2: Sanitize Queries (decoupling from LLM artifacts)
             logger.info("Sanitizing generated search queries.")
             
-            # (2) Query Guardrail
             sanitized_queries = GuardrailManager.validate_queries(query_data["queries"])
             logger.info("Query sanitization completed.")
 
+            if request_id:
+                asyncio.create_task(ProgressManager.publish(request_id, "Web Search Agent", "running", "Executing live market intelligence search..."))
+                
             # Stage 3: Execute Searches
             raw_results = await self._execute_searches(sanitized_queries)
 
@@ -117,6 +128,9 @@ class WebSearchAgent:
 
             # --- Filter & Rank Results ---
             refined_results, category_metadata = self._filter_and_rank_results(processed_results)
+            
+            # Synchronize results back into shared context for downstream agents
+            self.context["research"] = refined_results
 
             # Stage 5: Assemble Final Output
             final_output = self._assemble_output(
@@ -127,24 +141,51 @@ class WebSearchAgent:
             )
 
             logger.info("Web Search Agent pipeline completed successfully.")
+            
+            if request_id:
+                asyncio.create_task(ProgressManager.publish(request_id, "Web Search Agent", "completed", "Market intelligence gathered."))
+                
             return final_output
 
-        except WebSearchAgentError:
-            logger.error("Web Search Agent pipeline failed.", exc_info=True)
-            raise
+        except WebSearchAgentError as exc:
+            logger.error("Web Search Agent pipeline failed: %s", exc)
+            return self._return_degraded(startup_idea, str(exc))
         except Exception as exc:
             logger.exception("Unexpected error in Web Search Agent pipeline.")
-            raise WebSearchAgentError("Unexpected failure in pipeline.") from exc
+            return self._return_degraded(startup_idea, str(exc))
+
+    def _return_degraded(self, startup_idea: str, reason: str) -> dict[str, Any]:
+        return {
+            "metadata": {
+                "status": "failed",
+                "agent": "WebSearchAgent",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "error": reason
+            },
+            "identified_context": {"product": startup_idea[:100]},
+            "search_queries": {},
+            "search_results": {}
+        }
 
     async def _generate_queries(self, startup_idea: str) -> dict[str, Any]:
         logger.info("Stage 1/3: Query generation started.")
         try:
             result = await self._query_strategist.run({"startup_idea": startup_idea})
+
+            import json
+
+            print("\n========== QUERY STRATEGIST OUTPUT ==========")
+            print(json.dumps(result, indent=2))
+            print("=============================================\n")
+
             logger.info("Stage 1/3: Query generation completed successfully.")
             return result
+
         except (QueryStrategistError, LLMResponseError) as exc:
             logger.exception("Query generation stage failed.")
-            raise WebSearchAgentError("Web Search Agent failed during query generation.") from exc
+            raise WebSearchAgentError(
+                "Web Search Agent failed during query generation."
+            ) from exc
 
     async def _execute_searches(
         self,

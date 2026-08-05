@@ -10,11 +10,12 @@ Synthesizes the analyses into a final startup evaluation including Feature Compa
 from __future__ import annotations
 import asyncio
 import json
-import os
 import time
+import re
 from datetime import datetime, timezone
-from typing import Any
+from typing import Dict, Any, List
 import logging
+from core.config import settings
 
 from utils.error_handler import safe_parse_llm_json, MalformedLLMOutputError
 
@@ -135,8 +136,7 @@ class ComparisonAgent:
         logger.info(f"{log_prefix} Available inputs: {available}. Missing inputs: {missing}")
 
         if not available:
-            logger.error(f"{log_prefix} Shared Context is completely empty.")
-            return self._return_fallback("No upstream analysis data found.", log_prefix)
+            logger.warning(f"{log_prefix} Upstream agents are missing. Synthesizing based on initial idea and search data only.")
 
         proposed_features = idea.get("proposed_features") or []
         if not proposed_features:
@@ -188,10 +188,12 @@ class ComparisonAgent:
         logger.info(f"{log_prefix} Requesting LLM synthesis for final validation report. Payload size: {payload_size_bytes} bytes (~{est_tokens} tokens).")
         
         parsed_analysis = None
-        max_retries = int(os.getenv("COMPARISON_MAX_RETRIES", "3"))
+        max_retries = settings.agent.COMPARISON_MAX_RETRIES
+        base_backoff = 2
         last_error = None
         llm_start = time.time()
-        timeout_seconds = int(os.getenv("COMPARISON_LLM_TIMEOUT", "45"))
+        
+        timeout_seconds = settings.agent.COMPARISON_LLM_TIMEOUT
         
         for attempt in range(max_retries):
             try:
@@ -260,8 +262,106 @@ class ComparisonAgent:
         else:
             confidence = "Low"
 
+        # --- FEATURE COMPARISON ENGINE ---
+        feature_map = {}
+        
+        raw_startup_features = []
+        raw_startup_features.extend(proposed_features)
+        
+        cust_demand = customer.get("feature_demand") or []
+        for f in cust_demand:
+            if isinstance(f, dict):
+                raw_startup_features.append(f.get("feature", ""))
+            else:
+                raw_startup_features.append(str(f))
+                
+        def normalize_feat(name: str) -> str:
+            name = str(name).lower()
+            name = re.sub(r'[^\w\s]', ' ', name)
+            words = [w for w in name.split() if len(w) > 1 and w not in {'the', 'and', 'with', 'using', 'for'}]
+            return " ".join(words)
+            
+        for f in raw_startup_features:
+            f_str = str(f).strip()
+            if not f_str: continue
+            norm = normalize_feat(f_str)
+            if not norm or len(norm) < 3: continue
+            if norm not in feature_map:
+                feature_map[norm] = {"original": f_str[:60].capitalize(), "startup": True, "competitor_set": set()}
+            else:
+                feature_map[norm]["startup"] = True
+                
+        comps = competitor.get("competitors") or []
+        for c in comps:
+            c_name = c.get("name", "Unknown")
+            c_feats = []
+            if isinstance(c.get("features"), list): c_feats.extend(c.get("features"))
+            if isinstance(c.get("strengths"), list): c_feats.extend(c.get("strengths"))
+            for f in c_feats:
+                if isinstance(f, dict): f = f.get("feature", "") or f.get("name", "")
+                f_str = str(f).strip()
+                if not f_str: continue
+                norm = normalize_feat(f_str)
+                if not norm or len(norm) < 3: continue
+                if norm not in feature_map:
+                    feature_map[norm] = {"original": f_str[:60].capitalize(), "startup": False, "competitor_set": set()}
+                feature_map[norm]["competitor_set"].add(c_name)
+                
+        feature_comparison = []
+        unique_count = 0
+        common_count = 0
+        missing_count = 0
+        comp_adv_count = 0
+        
+        for norm, data in feature_map.items():
+            startup_has = data["startup"]
+            comp_count = len(data["competitor_set"])
+            
+            if not startup_has and comp_count > 0:
+                coverage = "Gap"
+                missing_count += 1
+                sort_order = 4
+            elif comp_count == 0:
+                coverage = "Unique"
+                unique_count += 1
+                sort_order = 1
+            elif comp_count <= 2:
+                coverage = "Rare"
+                comp_adv_count += 1
+                sort_order = 2
+            elif comp_count <= 5:
+                coverage = "Partial"
+                comp_adv_count += 1
+                sort_order = 2
+            else:
+                coverage = "Common"
+                common_count += 1
+                sort_order = 3
+                
+            feature_comparison.append({
+                "feature": data["original"],
+                "startup": startup_has,
+                "competitors": comp_count,
+                "coverage": coverage,
+                "_sort_order": sort_order
+            })
+            
+        feature_comparison.sort(key=lambda x: (x["_sort_order"], -x["competitors"]))
+        for fc in feature_comparison:
+            fc.pop("_sort_order", None)
+            
+        feature_summary = {
+            "unique_features": unique_count,
+            "common_features": common_count,
+            "missing_features": missing_count,
+            "competitive_advantage": comp_adv_count
+        }
+        # --- END FEATURE ENGINE ---
+
+        self.status = "success"
         analysis = {
-            "feature_comparison": [],
+            "feature_comparison": feature_comparison,
+            "feature_summary": feature_summary,
             "competitive_advantages": comp_adv_list,
             "market_gaps": market_gaps,
             "validation_score": val_score,
@@ -275,8 +375,8 @@ class ComparisonAgent:
         }
         
         stats = {
-            "features_compared": len(validated_matrix),
-            "advantages_identified": len(competitive_advantages),
+            "features_compared": len(analysis["feature_comparison"]),
+            "advantages_identified": len(comp_adv_list),
             "market_gaps_detected": len(market_gaps),
             "recommendations_generated": len(recommendations),
             "validation_score": val_score,

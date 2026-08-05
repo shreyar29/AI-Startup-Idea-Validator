@@ -13,10 +13,11 @@ import time
 import logging
 import asyncio
 import uuid
-import os
 from typing import Any, Dict
 
+from core.config import settings
 from guardrails.manager import GuardrailManager
+from utils.progress import ProgressManager
 
 # Business Agents
 from strategy.query_strategist import QueryStrategist
@@ -61,6 +62,11 @@ class MeshNodeWrapper:
         }
         logger.info(f"[{self.correlation_id}] {self.name}: Execution started.")
         
+        request_id = self.node.context.get("request_id")
+        if request_id and self.name != "Web Search Agent":
+            # Avoid duplicating Web Search events as it manages granular internal steps
+            asyncio.create_task(ProgressManager.publish(request_id, self.name, "running", f"Analyzing data..."))
+        
         try:
             result = await asyncio.wait_for(self.node.get_analysis(), timeout=self.timeout)
             duration = time.time() - start_time
@@ -70,6 +76,8 @@ class MeshNodeWrapper:
                 "duration": round(duration, 2)
             })
             logger.info(f"[{self.correlation_id}] {self.name}: Completed successfully in {duration:.2f}s.")
+            if request_id and self.name != "Web Search Agent":
+                asyncio.create_task(ProgressManager.publish(request_id, self.name, "completed", f"{self.name} finished successfully."))
             return result
         except asyncio.TimeoutError:
             duration = time.time() - start_time
@@ -80,6 +88,8 @@ class MeshNodeWrapper:
                 "error": "Timeout exceeded"
             })
             logger.error(f"[{self.correlation_id}] {self.name}: Timed out after {self.timeout}s. Degrading gracefully.")
+            if request_id and self.name != "Web Search Agent":
+                asyncio.create_task(ProgressManager.publish(request_id, self.name, "failed", f"{self.name} timed out."))
             return {}
         except Exception as e:
             duration = time.time() - start_time
@@ -90,6 +100,8 @@ class MeshNodeWrapper:
                 "error": str(e)
             })
             logger.exception(f"[{self.correlation_id}] {self.name}: Failed with error: {e}. Degrading gracefully.")
+            if request_id and self.name != "Web Search Agent":
+                asyncio.create_task(ProgressManager.publish(request_id, self.name, "failed", f"{self.name} encountered an error."))
             return {}
 
 
@@ -107,7 +119,7 @@ class StartupValidatorOrchestrator:
         self.search_service = search_service
         self.result_processor = result_processor
 
-    async def validate_idea(self, startup_idea: str) -> Dict[str, Any]:
+    async def validate_idea(self, startup_idea: str, request_id: str = None) -> Dict[str, Any]:
         """
         Executes the full architecture asynchronously by connecting agents in a mesh
         and requesting the final synthesis.
@@ -120,6 +132,7 @@ class StartupValidatorOrchestrator:
         shared_context = {
             "idea": {"description": startup_idea, "proposed_features": []},
             "correlation_id": correlation_id,
+            "request_id": request_id,
             "research": {},
             "market_analysis": {},
             "customer_analysis": {},
@@ -143,11 +156,11 @@ class StartupValidatorOrchestrator:
 
             # 2. Form the P2P Mesh (Fully Connected) with Wrappers
             wrapped_peers = {
-                "web_search": MeshNodeWrapper("Web Search Agent", web_search_node, metrics, correlation_id, timeout=int(os.getenv("WEB_SEARCH_TIMEOUT", "120"))),
-                "market": MeshNodeWrapper("Market Agent", market_node, metrics, correlation_id, timeout=int(os.getenv("MARKET_AGENT_TIMEOUT", "180"))),
-                "customer": MeshNodeWrapper("Customer Agent", customer_node, metrics, correlation_id, timeout=int(os.getenv("CUSTOMER_AGENT_TIMEOUT", "180"))),
-                "competitor": MeshNodeWrapper("Competitor Agent", competitor_node, metrics, correlation_id, timeout=int(os.getenv("COMPETITOR_AGENT_TIMEOUT", "180"))),
-                "comparison": MeshNodeWrapper("Comparison Agent", comparison_node, metrics, correlation_id, timeout=int(os.getenv("COMPARISON_AGENT_TIMEOUT", "180")))
+                "web_search": MeshNodeWrapper("Web Search Agent", web_search_node, metrics, correlation_id, timeout=settings.orchestrator.WEB_SEARCH_TIMEOUT),
+                "market": MeshNodeWrapper("Market Agent", market_node, metrics, correlation_id, timeout=settings.orchestrator.MARKET_AGENT_TIMEOUT),
+                "customer": MeshNodeWrapper("Customer Agent", customer_node, metrics, correlation_id, timeout=settings.orchestrator.CUSTOMER_AGENT_TIMEOUT),
+                "competitor": MeshNodeWrapper("Competitor Agent", competitor_node, metrics, correlation_id, timeout=settings.orchestrator.COMPETITOR_AGENT_TIMEOUT),
+                "comparison": MeshNodeWrapper("Comparison Agent", comparison_node, metrics, correlation_id, timeout=settings.orchestrator.COMPARISON_AGENT_TIMEOUT)
             }
 
             for node in [web_search_node, market_node, customer_node, competitor_node, comparison_node]:
@@ -162,15 +175,17 @@ class StartupValidatorOrchestrator:
                 isinstance(v, list) and len(v) > 0 for v in web_search_data.values()
             )
             if not has_categories:
-                logger.error(f"[{correlation_id}] Orchestrator: Web search returned empty or invalid data.")
-                raise PayloadIntegrityError("Web search returned no data. Aborting downstream mesh.")
+                logger.warning(f"[{correlation_id}] Orchestrator: Web search returned empty or invalid data. Continuing downstream mesh regardless.")
                 
-            logger.info(f"[{correlation_id}] Payload integrity validated. Triggering P2P Mesh Execution...")
+            logger.info(f"[{correlation_id}] Payload integrity check completed. Triggering P2P Mesh Execution...")
             await wrapped_peers["comparison"].get_analysis()
     
             exec_time = time.time() - start_time
             logger.info(f"[{correlation_id}] P2P Mesh Network completed successfully in {exec_time:.2f} seconds.")
             logger.info(f"[{correlation_id}] Aggregating final response payloads.")
+            
+            if request_id:
+                await ProgressManager.publish(request_id, "Guardrails", "running", "Applying evidence guardrails and hallucination checks...")
             
             # Apply (4) Agent Output Guardrails and (5) Fact & Hallucination Guardrails
             market_data = GuardrailManager.validate_agent_output(
@@ -188,6 +203,10 @@ class StartupValidatorOrchestrator:
             
             market_data = GuardrailManager.verify_facts_and_hallucinations("Market Agent", market_data, web_search_data)
             competitor_data = GuardrailManager.verify_facts_and_hallucinations("Competitor Agent", competitor_data, web_search_data)
+            
+            if request_id:
+                await ProgressManager.publish(request_id, "Guardrails", "completed", "Guardrail verification passed.")
+                await ProgressManager.publish(request_id, "Report Generator", "running", "Preparing Executive Report...")
 
             # Evaluate overall orchestration status based on mesh execution metrics
             critical_agents = ["Web Search Agent", "Comparison Agent"]
@@ -226,14 +245,19 @@ class StartupValidatorOrchestrator:
             }
             
             # Apply (6) Final Response Guardrail
-            return GuardrailManager.verify_final_response(raw_response)
+            final_report = GuardrailManager.verify_final_response(raw_response)
+            
+            if request_id:
+                await ProgressManager.publish(request_id, "Orchestrator", "completed", "Validation pipeline finished.")
+                
+            return final_report
 
         except PayloadIntegrityError as e:
             logger.error(f"[{correlation_id}] Critical Payload Integrity Error: {e}")
             return self._format_error_response(startup_idea, correlation_id, start_time, str(e), metrics)
         except Exception as e:
             logger.exception(f"[{correlation_id}] P2P Mesh Network failed unexpectedly for idea: '{startup_idea}'")
-            return self._format_error_response(startup_idea, correlation_id, start_time, f"Unexpected error: {str(e)}", metrics)
+            return self._format_error_response(startup_idea, correlation_id, start_time, "An unexpected error occurred during startup validation.", metrics)
 
     def _format_error_response(self, startup_idea: str, correlation_id: str, start_time: float, error_msg: str, metrics: Dict[str, Any]) -> Dict[str, Any]:
         return {

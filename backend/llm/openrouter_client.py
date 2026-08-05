@@ -6,9 +6,7 @@ import time
 from typing import Any
 
 import httpx
-from dotenv import load_dotenv
-
-load_dotenv(override=True)
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -20,15 +18,15 @@ class OpenRouterClient:
     _shared_client = None
 
     def __init__(self, api_key: str = None, model: str = None):
-        self._api_key = api_key or os.getenv("OPENROUTER_API_KEY")
-        self._model = model or os.getenv("OPENROUTER_MODEL") or "meta-llama/llama-3.1-8b-instruct:free"
-        self._base_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-        self._max_retries = int(os.getenv("OPENROUTER_MAX_RETRIES", "5"))
-        self._timeout = float(os.getenv("OPENROUTER_TIMEOUT", "60.0"))
-        self._max_tokens = int(os.getenv("OPENROUTER_MAX_TOKENS", "900"))
-        self._use_json_mode = os.getenv("OPENROUTER_USE_JSON_MODE", "True").lower() in ("true", "1", "yes")
+        self._api_key = api_key or settings.llm.OPENROUTER_API_KEY
+        self._model = model or settings.llm.OPENROUTER_MODEL
+        self._base_url = settings.llm.OPENROUTER_BASE_URL
+        self._max_retries = settings.llm.OPENROUTER_MAX_RETRIES
+        self._timeout = settings.llm.OPENROUTER_TIMEOUT
+        self._max_tokens = settings.llm.OPENROUTER_MAX_TOKENS
+        self._use_json_mode = settings.llm.OPENROUTER_USE_JSON_MODE
         
-        concurrency = int(os.getenv("OPENROUTER_CONCURRENCY", "4"))
+        concurrency = settings.llm.OPENROUTER_CONCURRENCY
 
         if not self._api_key:
             logger.error("Missing OPENROUTER_API_KEY.")
