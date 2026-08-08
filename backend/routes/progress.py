@@ -9,6 +9,12 @@ router = APIRouter()
 @router.get("/progress/{request_id}")
 async def get_progress(request_id: str, request: Request):
     session = await ProgressManager.get_session(request_id)
+    retries = 0
+    while not session and retries < 20: # Wait up to 10 seconds for session creation
+        await asyncio.sleep(0.5)
+        session = await ProgressManager.get_session(request_id)
+        retries += 1
+
     if not session:
         raise HTTPException(status_code=404, detail="Progress session not found or already completed.")
 
@@ -19,15 +25,24 @@ async def get_progress(request_id: str, request: Request):
                     break
                 
                 try:
-                    event = await asyncio.wait_for(session.queue.get(), timeout=1.0)
+                    event = await asyncio.wait_for(session.queue.get(), timeout=15.0)
                     yield f"data: {json.dumps(event)}\n\n"
                     
-                    if event["status"] in ["completed", "failed"] and event["agent"] == "Orchestrator":
-                        break
+                    if isinstance(event, dict):
+                        if event.get("status") in ["completed", "failed"] and event.get("agent") == "Orchestrator":
+                            break
                 except asyncio.TimeoutError:
-                    # Keep-alive or just continue checking for disconnection
-                    continue
+                    # Emit SSE comment to keep reverse proxies alive
+                    yield ": keep-alive\n\n"
         finally:
-            await ProgressManager.remove_session(request_id)
+            pass # Session cleanup is handled by the background task, so clients can reconnect
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )

@@ -13,7 +13,7 @@ import json
 import time
 import re
 from datetime import datetime, timezone
-from typing import Dict, Any, List
+from typing import Any
 import logging
 from core.config import settings
 
@@ -69,7 +69,7 @@ class ComparisonAgent:
 
     async def _perform_analysis(self):
         self.status = "started"
-        start_time = time.time()
+        start_time = time.perf_counter()
         correlation_id = self.context.get("correlation_id", "N/A")
         log_prefix = f"[{correlation_id}] ComparisonAgent:"
         
@@ -107,12 +107,16 @@ class ComparisonAgent:
         if isinstance(val, str): return [val]
         return []
 
+    def _dedupe_list(self, raw_list: list) -> list:
+        val_list = self._validate_and_coerce_list(raw_list)
+        return list(dict.fromkeys(val_list))
+
     async def compare(self, log_prefix: str = "ComparisonAgent:", start_time: float = None) -> dict[str, Any]:
         """
         Main Comparison Agent entry point.
         """
         if start_time is None:
-            start_time = time.time()
+            start_time = time.perf_counter()
             
         logger.info(f"{log_prefix} Execution started.")
 
@@ -179,7 +183,9 @@ class ComparisonAgent:
             f"2. Calculate 'validation_score' (0-100) based on demand and feasibility.\n"
             f"3. 'recommendation' MUST be one of: 'Strongly Recommended', 'Recommended', 'Needs Improvement', 'Not Recommended'.\n"
             f"4. 'key_risks' and 'next_steps' MUST be arrays of max 5 strings.\n"
-            f"5. Output ONLY valid JSON containing EXACTLY these keys: 'market_fit', 'competitive_advantage', 'innovation_score', 'validation_score', 'recommendation', 'key_risks', 'next_steps'.\n\n"
+            f"5. 'scoring_breakdown' MUST be an object with string values like '25/30' for 'Market Opportunity', 'Competition', 'Customer Demand', 'Innovation', 'Execution Feasibility' summing to validation_score.\n"
+            f"6. 'market_fit' MUST be a detailed executive summary explaining WHY. Include Top strengths, Top weaknesses, Top opportunities, Top risks, and Evidence supporting each. Do not just summarize.\n"
+            f"7. Output ONLY valid JSON containing EXACTLY these keys: 'market_fit', 'competitive_advantage', 'innovation_score', 'validation_score', 'scoring_breakdown', 'recommendation', 'key_risks', 'next_steps'.\n\n"
             f"Input Data:\n{compact_payload}"
         )
 
@@ -191,7 +197,7 @@ class ComparisonAgent:
         max_retries = settings.agent.COMPARISON_MAX_RETRIES
         base_backoff = 2
         last_error = None
-        llm_start = time.time()
+        llm_start = time.perf_counter()
         
         timeout_seconds = settings.agent.COMPARISON_LLM_TIMEOUT
         
@@ -215,12 +221,14 @@ class ComparisonAgent:
             except MalformedLLMOutputError as e:
                 logger.warning(f"{log_prefix} Malformed JSON output on attempt {attempt + 1}: {e}")
                 last_error = str(e)
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(base_backoff ** attempt)
             except Exception as exc:
                 logger.error(f"{log_prefix} LLM synthesis API call failed on attempt {attempt + 1}: {exc}.")
                 last_error = str(exc)
                 break # Break on network/API errors, only retry on JSON parsing failures
 
-        llm_duration = time.time() - llm_start
+        llm_duration = time.perf_counter() - llm_start
         logger.info(f"{log_prefix} LLM extraction latency: {llm_duration:.2f}s (Attempts: {attempt + 1}/{max_retries})")
 
         if not parsed_analysis:
@@ -229,15 +237,11 @@ class ComparisonAgent:
 
         logger.info(f"{log_prefix} Validating and structuring final report.")
 
-        def dedupe_list(raw_list):
-            val_list = self._validate_and_coerce_list(raw_list)
-            return list(dict.fromkeys(val_list))
-
         competitive_advantage = parsed_analysis.get("competitive_advantage")
         comp_adv_list = [str(competitive_advantage)] if competitive_advantage else []
 
-        market_gaps = dedupe_list(parsed_analysis.get("key_risks"))
-        next_steps = dedupe_list(parsed_analysis.get("next_steps"))
+        market_gaps = self._dedupe_list(parsed_analysis.get("key_risks"))
+        next_steps = self._dedupe_list(parsed_analysis.get("next_steps"))
         recommendation_str = str(parsed_analysis.get("recommendation", ""))
         
         recommendations = [recommendation_str] if recommendation_str else []
@@ -254,6 +258,7 @@ class ComparisonAgent:
             inn_score = 0
 
         summary = str(parsed_analysis.get("market_fit", "Validation summary could not be generated."))
+        scoring_breakdown = parsed_analysis.get("scoring_breakdown") or {}
 
         if len(available) == 3:
             confidence = "High"
@@ -278,7 +283,7 @@ class ComparisonAgent:
         def normalize_feat(name: str) -> str:
             name = str(name).lower()
             name = re.sub(r'[^\w\s]', ' ', name)
-            words = [w for w in name.split() if len(w) > 1 and w not in {'the', 'and', 'with', 'using', 'for'}]
+            words = [w for w in name.split() if len(w) > 1 and w not in {'the', 'and', 'with', 'using', 'for', 'to', 'of', 'in', 'a', 'an'}]
             return " ".join(words)
             
         for f in raw_startup_features:
@@ -366,6 +371,7 @@ class ComparisonAgent:
             "market_gaps": market_gaps,
             "validation_score": val_score,
             "innovation_score": inn_score,
+            "scoring_breakdown": scoring_breakdown,
             "confidence": confidence,
             "recommendations": recommendations,
             "summary": summary,
@@ -385,11 +391,11 @@ class ComparisonAgent:
         }
         logger.info(f"{log_prefix} Processing Stats: {stats}")
 
-        logger.info(f"--- COMPARISON AGENT COMPLETE PAYLOAD ---")
-        logger.info(json.dumps(analysis, indent=2))
-        logger.info("-----------------------------------------")
+        logger.debug(f"--- COMPARISON AGENT COMPLETE PAYLOAD ---")
+        logger.debug(json.dumps(analysis, indent=2))
+        logger.debug("-----------------------------------------")
 
-        duration = time.time() - start_time
+        duration = time.perf_counter() - start_time
         logger.info(f"{log_prefix} Successful completion in {duration:.2f}s. Output ready for Orchestrator.")
         self.context["comparison_analysis"] = analysis
         return analysis
@@ -401,6 +407,7 @@ class ComparisonAgent:
             "market_gaps": [],
             "validation_score": 0,
             "innovation_score": 0,
+            "scoring_breakdown": {},
             "confidence": "Low",
             "recommendations": [f"Final comparison failed due to {reason}"],
             "summary": f"Startup validation could not be completed. Reason: {reason}",

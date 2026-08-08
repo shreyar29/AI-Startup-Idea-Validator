@@ -25,15 +25,17 @@ becomes the input contract for the future Market Analysis Agent.
 
 from __future__ import annotations
 import asyncio
+import json
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlparse
 
 from strategy.query_strategist import QueryStrategist
 from services.tavily_service import TavilySearchService
 from processors.result_processor import ResultProcessor
 from utils.logger import get_logger
-from utils.text_sanitizer import sanitize_category_queries
 from guardrails.manager import GuardrailManager
+from core.config import settings
 from utils.error_handler import (
     QueryStrategistError,
     LLMResponseError,
@@ -43,6 +45,8 @@ from utils.error_handler import (
 )
 
 logger = get_logger(__name__)
+
+_TRUSTED_DOMAINS = settings.guardrails.trusted_domains_list
 
 
 class WebSearchAgent:
@@ -68,6 +72,21 @@ class WebSearchAgent:
     def connect_peers(self, peers: dict):
         self.peers = peers
 
+    def _publish_progress(self, request_id: str, agent: str, status: str, message: str) -> None:
+        if not request_id:
+            return
+        from utils.progress import ProgressManager
+        
+        task = asyncio.create_task(ProgressManager.publish(request_id, agent, status, message))
+        
+        def _on_done(t: asyncio.Task):
+            try:
+                t.result()
+            except Exception as e:
+                logger.error("Failed to publish progress event in Web Search Agent: %s", e)
+                
+        task.add_done_callback(_on_done)
+
     async def get_analysis(self):
         if self._analysis_task is None:
             self._analysis_task = asyncio.create_task(self._perform_analysis())
@@ -81,12 +100,10 @@ class WebSearchAgent:
         result = await self.run(startup_idea)
         search_results = result.get("search_results", {})
         
-        import json
-        logger.info(f"--- WEB SEARCH AGENT COMPLETE RESEARCH PAYLOAD ---")
-        logger.info(f"Startup Idea: {startup_idea}")
-        logger.info(f"Categories Researched: {list(search_results.keys())}")
-        logger.info(f"Full Payload:\n{json.dumps(search_results, indent=2)}")
-        logger.info(f"--------------------------------------------------")
+        logger.info("--- WEB SEARCH AGENT COMPLETE RESEARCH PAYLOAD ---")
+        logger.info("Categories Researched: %s", list(search_results.keys()))
+        logger.debug("Full Payload:\n%s", json.dumps(search_results, indent=2))
+        logger.info("--------------------------------------------------")
         
         return search_results
 
@@ -97,17 +114,14 @@ class WebSearchAgent:
         logger.info("Web Search Agent pipeline started. Idea: %s", startup_idea)
         
         request_id = self.context.get("request_id")
-        from utils.progress import ProgressManager
 
         try:
             # Stage 1: Generate Queries
-            if request_id:
-                asyncio.create_task(ProgressManager.publish(request_id, "Query Strategist", "running", "Generating intelligent search queries..."))
+            self._publish_progress(request_id, "Query Strategist", "running", "Generating intelligent search queries...")
                 
             query_data = await self._generate_queries(startup_idea)
             
-            if request_id:
-                asyncio.create_task(ProgressManager.publish(request_id, "Query Strategist", "completed", "Generated specialized search queries."))
+            self._publish_progress(request_id, "Query Strategist", "completed", "Generated specialized search queries.")
             
             # Stage 2: Sanitize Queries (decoupling from LLM artifacts)
             logger.info("Sanitizing generated search queries.")
@@ -115,8 +129,7 @@ class WebSearchAgent:
             sanitized_queries = GuardrailManager.validate_queries(query_data["queries"])
             logger.info("Query sanitization completed.")
 
-            if request_id:
-                asyncio.create_task(ProgressManager.publish(request_id, "Web Search Agent", "running", "Executing live market intelligence search..."))
+            self._publish_progress(request_id, "Web Search Agent", "running", "Executing live market intelligence search...")
                 
             # Stage 3: Execute Searches
             raw_results = await self._execute_searches(sanitized_queries)
@@ -142,16 +155,17 @@ class WebSearchAgent:
 
             logger.info("Web Search Agent pipeline completed successfully.")
             
-            if request_id:
-                asyncio.create_task(ProgressManager.publish(request_id, "Web Search Agent", "completed", "Market intelligence gathered."))
+            self._publish_progress(request_id, "Web Search Agent", "completed", "Market intelligence gathered.")
                 
             return final_output
 
         except WebSearchAgentError as exc:
             logger.error("Web Search Agent pipeline failed: %s", exc)
+            self._publish_progress(request_id, "Web Search Agent", "failed", "Market intelligence gathering failed.")
             return self._return_degraded(startup_idea, str(exc))
         except Exception as exc:
             logger.exception("Unexpected error in Web Search Agent pipeline.")
+            self._publish_progress(request_id, "Web Search Agent", "failed", "Unexpected error during market intelligence.")
             return self._return_degraded(startup_idea, str(exc))
 
     def _return_degraded(self, startup_idea: str, reason: str) -> dict[str, Any]:
@@ -172,17 +186,15 @@ class WebSearchAgent:
         try:
             result = await self._query_strategist.run({"startup_idea": startup_idea})
 
-            import json
-
-            print("\n========== QUERY STRATEGIST OUTPUT ==========")
-            print(json.dumps(result, indent=2))
-            print("=============================================\n")
+            logger.debug("\n========== QUERY STRATEGIST OUTPUT ==========\n%s\n=============================================\n", json.dumps(result, indent=2))
 
             logger.info("Stage 1/3: Query generation completed successfully.")
             return result
 
         except (QueryStrategistError, LLMResponseError) as exc:
             logger.exception("Query generation stage failed.")
+            request_id = self.context.get("request_id")
+            self._publish_progress(request_id, "Query Strategist", "failed", "Failed to generate search queries.")
             raise WebSearchAgentError(
                 "Web Search Agent failed during query generation."
             ) from exc
@@ -194,15 +206,27 @@ class WebSearchAgent:
         logger.info("Stage 2/3: Tavily search started for each category.")
 
         raw_results: dict[str, list[dict[str, Any]]] = {}
+        semaphore = asyncio.Semaphore(3)
 
-        for category, queries in categorized_queries.items():
+        async def _bounded_search(category: str, queries: list[str]):
             if not queries:
                 logger.info("Skipping category '%s' — no queries to execute.", category)
-                raw_results[category] = []
-                continue
+                return category, []
 
-            logger.info("Searching category '%s' (%d queries).", category, len(queries))
-            raw_results[category] = await self._search_with_retries(category, queries)
+            async with semaphore:
+                logger.info("Searching category '%s' (%d queries).", category, len(queries))
+                res = await self._search_with_retries(category, queries)
+                return category, res
+
+        tasks = [_bounded_search(cat, qs) for cat, qs in categorized_queries.items()]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for res in results:
+            if isinstance(res, Exception):
+                logger.exception("A bounded search task failed with an exception.")
+                raise WebSearchAgentError("A bounded search task failed") from res
+            cat, res_list = res
+            raw_results[cat] = res_list
 
         logger.info("Stage 2/3: Tavily search completed for all categories.")
         return raw_results
@@ -280,16 +304,9 @@ class WebSearchAgent:
     def _filter_and_rank_results(
         self, processed_results: dict[str, list[dict[str, Any]]]
     ) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
-        from urllib.parse import urlparse
         
         refined_results = {}
         category_metadata = {}
-        
-        trusted_domains = [
-            "gartner.com", "statista.com", "mckinsey.com", "forbes.com", 
-            "bloomberg.com", "wsj.com", "techcrunch.com", ".gov", ".edu", 
-            "forrester.com", "idc.com", "techradar.com", "cnbc.com", "reuters.com"
-        ]
         
         for category, results in processed_results.items():
             results_found = len(results)
@@ -338,7 +355,7 @@ class WebSearchAgent:
                 seen_domains.add(domain)
                 final_cat_results.append(r)
                 
-                if any(td in domain for td in trusted_domains):
+                if any(td in domain for td in _TRUSTED_DOMAINS):
                     trusted_count += 1
                 
                 if len(final_cat_results) >= 5:
@@ -351,7 +368,7 @@ class WebSearchAgent:
                 final_cat_results = results  # Fallback to original results
                 # Compute trusted sources for metadata accurately
                 for r in final_cat_results:
-                    if any(td in str(r.get("url", "")).lower() for td in trusted_domains):
+                    if any(td in str(r.get("url", "")).lower() for td in _TRUSTED_DOMAINS):
                         trusted_count += 1
                         
             logger.info(f"Category '{category}' | Original: {results_found} | After filtering: {len(final_cat_results)} | Fallback used: {fallback_used}")

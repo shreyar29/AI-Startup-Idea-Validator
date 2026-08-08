@@ -19,9 +19,6 @@ from routes.progress import router as progress_router
 from utils.logger import get_logger
 from db import init_db
 
-# Placeholder for centralized configuration integration
-# from core.config import settings
-
 logger = get_logger(__name__)
 
 API_VERSION = "1.0.0"
@@ -43,14 +40,18 @@ async def lifespan(app: FastAPI):
         raise RuntimeError(f"Startup validation failed: {str(e)}") from e
 
     init_db()
-    logger.info("Database initialized successfully.")
     
     # Start ProgressManager cleanup task
     from utils.progress import ProgressManager
     async def cleanup_task():
         while True:
-            await asyncio.sleep(3600)
-            await ProgressManager.cleanup_stale_sessions()
+            try:
+                await asyncio.sleep(3600)
+                await ProgressManager.cleanup_stale_sessions()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.exception(f"Error in cleanup task: {str(e)}")
             
     cleaner = asyncio.create_task(cleanup_task())
     
@@ -58,6 +59,10 @@ async def lifespan(app: FastAPI):
     
     # Shutdown actions
     cleaner.cancel()
+    try:
+        await cleaner
+    except asyncio.CancelledError:
+        pass
     logger.info("Shutting down VentureLens API gracefully...")
     await container.shutdown()
 
@@ -83,10 +88,19 @@ app = FastAPI(
 
 # Configurable CORS instead of wildcard
 ALLOWED_ORIGINS = settings.app.allowed_origins_list
+is_development = os.environ.get("ENVIRONMENT", "").lower() == "development"
+
+if not ALLOWED_ORIGINS:
+    if is_development:
+        ALLOWED_ORIGINS = ["*"]
+    else:
+        raise RuntimeError("CORS allowed_origins must be configured in production.")
+elif "*" in ALLOWED_ORIGINS and not is_development:
+    raise RuntimeError("Wildcard CORS ('*') is not permitted in production.")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS or ["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -96,13 +110,13 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable):
         request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
         request.state.request_id = request_id
-        start_time = time.time()
+        start_time = time.perf_counter()
         
         logger.info(f"Request started: {request.method} {request.url.path} (ID: {request_id})")
         
         try:
             response = await call_next(request)
-            process_time = time.time() - start_time
+            process_time = time.perf_counter() - start_time
             
             # Inject correlation IDs and metrics
             response.headers["X-Request-ID"] = request_id
@@ -111,8 +125,12 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
             # Security Headers
             response.headers["X-Content-Type-Options"] = "nosniff"
             response.headers["X-Frame-Options"] = "DENY"
-            response.headers["X-XSS-Protection"] = "1; mode=block"
-            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+            
+            x_forwarded_proto = request.headers.get("x-forwarded-proto", "").lower().split(",")
+            is_https = request.url.scheme == "https" or any(proto.strip() == "https" for proto in x_forwarded_proto)
+            
+            if is_https:
+                response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
             
             # Swagger UI needs to load assets from jsdelivr
             if not request.url.path.startswith(("/docs", "/redoc", "/openapi.json")):
@@ -124,7 +142,7 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
             logger.info(f"Request completed: {request.method} {request.url.path} - Status: {response.status_code} - Time: {process_time:.4f}s (ID: {request_id})")
             return response
         except Exception as e:
-            process_time = time.time() - start_time
+            process_time = time.perf_counter() - start_time
             logger.exception(f"Request failed: {request.method} {request.url.path} - Time: {process_time:.4f}s (ID: {request_id})")
             raise
 
@@ -133,7 +151,7 @@ app.add_middleware(RequestTrackingMiddleware)
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     request_id = getattr(request.state, "request_id", "unknown")
-    logger.error(f"Unhandled Exception for Request ID {request_id}: {str(exc)}")
+    logger.exception(f"Unhandled Exception for Request ID {request_id}")
     return JSONResponse(
         status_code=500,
         content={
@@ -162,6 +180,8 @@ def health_check():
 @app.get("/ready", tags=["system"])
 async def readiness_check(response: Response):
     # Enhanced readiness check prepared for dependency validation (DB, Cache, external APIs)
+    # TODO: Add readiness check for database (db.py) when a health check method is exposed.
+    # TODO: Add readiness check for search_service (TavilySearchService) when a health check method is exposed.
     try:
         llm_provider = container.get_llm_provider()
         dependencies_healthy = await llm_provider.health_check()
@@ -177,23 +197,30 @@ async def readiness_check(response: Response):
 
 @app.get("/api/logs/stream")
 async def stream_logs(request: Request):
+    # TODO: Production deployments must protect this endpoint using authentication.
     async def log_generator():
         log_file = "validation.log"
-        if not os.path.exists(log_file):
-            open(log_file, 'a').close()
+        
+        def touch_file():
+            if not os.path.exists(log_file):
+                open(log_file, 'a').close()
+                
+        await asyncio.to_thread(touch_file)
             
-        with open(log_file, "r", encoding="utf-8") as f:
-            f.seek(0, 2) # go to end
+        f = await asyncio.to_thread(open, log_file, "r", encoding="utf-8")
+        try:
+            await asyncio.to_thread(f.seek, 0, 2) # go to end
             while True:
                 if await request.is_disconnected():
                     break
-                line = f.readline()
-                if not line:
+                lines = await asyncio.to_thread(f.readlines)
+                if not lines:
                     await asyncio.sleep(0.5)
                     continue
                 # Ensure no newlines break SSE format
-                yield f"data: {line.strip()}\n\n"
+                for line in lines:
+                    yield f"data: {line.strip()}\n\n"
+        finally:
+            await asyncio.to_thread(f.close)
 
-    return StreamingResponse(log_generator(), media_type="text/event-stream")
-
-# Trigger reload
+    return StreamingResponse(log_generator(), media_type="text/event-stream")

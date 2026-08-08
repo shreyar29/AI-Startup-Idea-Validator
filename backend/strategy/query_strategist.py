@@ -9,13 +9,12 @@ understanding and query generation to the LLM.
 
 from __future__ import annotations
 
-import json
 import asyncio
 import random
 from typing import Any
 from datetime import datetime, timezone
 
-from strategy.query_prompt import SYSTEM_PROMPT
+from strategy.query_prompt import SYSTEM_PROMPT, REPAIR_SYSTEM_PROMPT, REPAIR_USER_PROMPT_TEMPLATE
 from strategy.query_rules import validate_startup_idea, SEARCH_CATEGORIES
 from llm.gemini_client import GeminiClient
 from utils.logger import get_logger
@@ -69,19 +68,8 @@ class QueryStrategist:
                 current_user = f"<startup_idea>\n{cleaned_idea}\n</startup_idea>"
             else:
                 logger.warning("Retry attempt %d for Query Strategist", attempt)
-                current_system = (
-                    "You are a schema-aware JSON repair agent. Your previous response failed schema validation. "
-                    "Return ONLY valid JSON enforcing the exact schema (identified_context, queries). "
-                    "Preserve the original meaning exactly. Do not invent facts. Repair both syntax and structure."
-                )
-                current_user = (
-                    "Your previous response failed schema validation. Return ONLY corrected valid JSON.\n\n"
-                    "exact required schema: {\"identified_context\": {\"product\": \"...\", \"industry\": \"...\", \"target_audience\": \"...\", \"technology\": \"...\"}, \"queries\": {\"category_name\": [\"query1\", \"query2\"]}}\n"
-                    "required keys: 'identified_context', 'queries'\n"
-                    "prohibited keys: Any other top-level keys\n"
-                    "output rules: Return ONLY valid JSON without markdown formatting or code blocks.\n\n"
-                    f"Invalid JSON:\n{raw_response}"
-                )
+                current_system = REPAIR_SYSTEM_PROMPT
+                current_user = REPAIR_USER_PROMPT_TEMPLATE.format(raw_response=raw_response)
 
             try:
                 raw_response = await self._call_llm(current_system, current_user)
@@ -95,6 +83,8 @@ class QueryStrategist:
                     retry_attempt=attempt
                 )
                 
+                # Extract _parse_metrics injected by safe_parse_llm_json. It is internal telemetry
+                # that does not belong in the final domain schema, but its values are saved to metadata.
                 parse_metrics = parsed_response.pop("_parse_metrics", {})
                 repaired_fields = self._validate_response_structure(parsed_response, cleaned_idea)
                 
@@ -147,10 +137,17 @@ class QueryStrategist:
                 "technology": "Unknown"
             },
             "queries": {
-                category: [f"{cleaned_idea[:50]} {category.replace('_', ' ')}"] 
+                category: self._generate_fallback_query(cleaned_idea, category) 
                 for category in SEARCH_CATEGORIES
             }
         }
+
+    def _generate_fallback_query(self, idea: str, category: str) -> list[str]:
+        """
+        Helper to generate a safe, predictable query if the LLM fails completely
+        or produces an irrecoverable schema violation for a specific category.
+        """
+        return [f"{idea[:50].strip()} {category.replace('_', ' ')}"]
 
     def _validate_input(self, startup_idea: str) -> str:
         try:
@@ -209,9 +206,14 @@ class QueryStrategist:
         for category in SEARCH_CATEGORIES:
             cat_queries = queries.get(category)
             
+            if isinstance(cat_queries, str):
+                logger.info("Auto-repairing string query into array for: queries.%s", category)
+                cat_queries = [cat_queries]
+                queries[category] = cat_queries
+            
             if not isinstance(cat_queries, list) or not cat_queries:
                 logger.warning("Missing or empty array for: queries.%s before validation injects defaults.", category)
-                queries[category] = [f"{startup_idea[:50]} {category.replace('_', ' ')}"]
+                queries[category] = self._generate_fallback_query(startup_idea, category)
                 repaired_fields.append(f"queries.{category}")
                 seen_queries.add(queries[category][0].lower())
                 continue
@@ -219,7 +221,7 @@ class QueryStrategist:
             first_query = cat_queries[0]
             if not isinstance(first_query, str) or not first_query.strip():
                 logger.warning("Invalid query string in: queries.%s before validation injects defaults.", category)
-                queries[category] = [f"{startup_idea[:50]} {category.replace('_', ' ')}"]
+                queries[category] = self._generate_fallback_query(startup_idea, category)
                 repaired_fields.append(f"queries.{category}_type_repair")
                 seen_queries.add(queries[category][0].lower())
                 continue

@@ -117,3 +117,23 @@ The JSON must follow this exact shape:
 
 Every category must always be present with exactly one query. Return valid, parseable JSON and absolutely nothing else.
 """
+
+# REPAIR_SYSTEM_PROMPT is used when the initial LLM response fails validation.
+# It strictly scopes the LLM to act as a syntax/schema repair agent rather than
+# generating new content.
+REPAIR_SYSTEM_PROMPT = (
+    "You are a schema-aware JSON repair agent. Your previous response failed schema validation. "
+    "Return ONLY valid JSON enforcing the exact schema (identified_context, queries). "
+    "Preserve the original meaning exactly. Do not invent facts. Repair both syntax and structure."
+)
+
+# REPAIR_USER_PROMPT_TEMPLATE provides the LLM with the broken JSON and the exact
+# schema expectations. Used dynamically with .format(raw_response=...).
+REPAIR_USER_PROMPT_TEMPLATE = (
+    "Your previous response failed schema validation. Return ONLY corrected valid JSON.\n\n"
+    "exact required schema: {\"identified_context\": {\"product\": \"...\", \"industry\": \"...\", \"target_audience\": \"...\", \"technology\": \"...\"}, \"queries\": {\"category_name\": [\"query1\", \"query2\"]}}\n"
+    "required keys: 'identified_context', 'queries'\n"
+    "prohibited keys: Any other top-level keys\n"
+    "output rules: Return ONLY valid JSON without markdown formatting or code blocks.\n\n"
+    "Invalid JSON:\n{raw_response}"
+)

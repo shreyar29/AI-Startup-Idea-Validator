@@ -5,18 +5,16 @@ customer_agent.py
 Purpose:
 Milestone 2 — Customer Segmentation Agent.
 Synthesizes raw search results into structured customer insights 
-(personas, pain points, sentiment, feature demand) using LLM inference over raw search data.
+(personas, pain points, sentiment, feature demand) using deterministic evidence extraction.
 """
 
 import asyncio
 import logging
 import json
+import re
 from typing import Dict, Any, List
 from core.config import settings
 from datetime import datetime, timezone
-from typing import Any
-
-from utils.error_handler import safe_parse_llm_json, MalformedLLMOutputError
 
 logger = logging.getLogger("customer_agent")
 
@@ -29,9 +27,8 @@ class CustomerAgent:
     Operates as a decentralized node in the A2A Mesh Network.
     """
 
-    def __init__(self, context, llm_client=None):
+    def __init__(self, context: dict):
         self.context = context
-        self.llm_client = llm_client
         self.peers = {}
         self._analysis_task = None
         self.status = "idle"
@@ -44,10 +41,31 @@ class CustomerAgent:
         """
         Mesh Network endpoint. Returns the analysis, computing it
         only once and caching the result as an asyncio Task.
+        Implements proper lifecycle resets on failure/timeout.
         """
+        if self._analysis_task is not None:
+            if self._analysis_task.done():
+                try:
+                    self._analysis_task.result()
+                    if self.status in ["failed", "timeout"]:
+                        logger.warning("CustomerAgent: Previous task completed in degraded state. Resetting task.")
+                        self._analysis_task = None
+                except Exception as e:
+                    logger.warning(f"CustomerAgent: Previous task failed with '{e}'. Resetting task.")
+                    self._analysis_task = None
+
         if self._analysis_task is None:
             self._analysis_task = asyncio.create_task(self._perform_analysis())
-        return await self._analysis_task
+            
+        try:
+            return await self._analysis_task
+        except asyncio.CancelledError:
+            logger.warning("CustomerAgent: Task cancelled. Resetting state.")
+            self._analysis_task = None
+            self.status = "failed"
+            raise
+        except Exception:
+            raise
 
     async def _perform_analysis(self):
         """Pulls required data from peers and runs the analysis."""
@@ -78,6 +96,27 @@ class CustomerAgent:
             return [val]
         return []
 
+    def _extract_core_insight(self, sentence: str) -> str:
+        bad_phrases = ["survey methodology", "conducted in", "designed around", "according to", "report shows", "research indicates", "study found", "analysis", "data shows"]
+        if any(b in sentence.lower() for b in bad_phrases):
+            return ""
+            
+        match = re.search(r'(?:includes|target|for|such as|like|struggle with|want to|need to|require|aimed at|focus on)\s+([^.]+)', sentence, re.IGNORECASE)
+        if match:
+            res = match.group(1).strip()
+            res = re.sub(r'[,;].*', '', res)
+            if 3 < len(res) < 50:
+                return res.capitalize()
+                
+        words = sentence.split()
+        if len(words) < 10 and len(sentence) > 3:
+            return sentence.capitalize()
+        return ""
+
+    def _dedupe_list(self, raw_list: list) -> list:
+        val_list = self._validate_and_coerce_list(raw_list)
+        return list(dict.fromkeys(val_list))
+
     async def analyze(self):
         """
         Main entry point. Uses LLM to parse raw customer snippets.
@@ -86,10 +125,10 @@ class CustomerAgent:
         logger.info("CustomerAgent: Execution started.")
         
         research = self.context.get("research") or {}
-        idea_data = self.context.get("idea") or {}
-        idea = idea_data.get("description", "Unknown startup idea")
-        proposed_features = idea_data.get("proposed_features", [])
 
+        max_snippets = settings.agent.CUSTOMER_MAX_SNIPPETS
+        max_snippet_length = settings.agent.CUSTOMER_MAX_SNIPPET_LENGTH
+        
         # Gather relevant snippets from categories matching Query Strategist output
         snippets = []
         if "search_results" in research and isinstance(research["search_results"], dict):
@@ -101,7 +140,7 @@ class CustomerAgent:
                 for r in results:
                     content = str(r.get("content") or "").strip()
                     if content:
-                        snippets.append(content)
+                        snippets.append(content[:max_snippet_length] if max_snippet_length else content)
                         
         if not snippets:
             self.status = "failed"
@@ -123,91 +162,69 @@ class CustomerAgent:
             
         logger.info(f"CustomerAgent: Consolidating {len(snippets)} snippets for customer analysis.")
         
-        max_snippets = settings.agent.CUSTOMER_MAX_SNIPPETS
-        max_snippet_length = settings.agent.CUSTOMER_MAX_SNIPPET_LENGTH
-        timeout_seconds = settings.agent.CUSTOMER_LLM_TIMEOUT
-        
         top_snippets = snippets[:max_snippets]
 
-        def generate_prompt(snippet_list):
-            raw_text = "\n\n".join([s[:max_snippet_length] for s in snippet_list])
-            p = (
-                f"Extract customer facts for startup idea: '{idea}'.\n"
-                f"RULES:\n"
-                f"1. Extract ONLY: target_customer_segments, pain_points, customer_goals, buying_behaviour, feature_demand, customer_journey.\n"
-                f"2. Use ONLY explicit facts from evidence. Do NOT explain or reason.\n"
-                f"3. If unavailable, return 'Unknown' or an empty list.\n\n"
-                f"Output strictly as a JSON object containing exactly these keys:\n"
-                f"- 'target_customer_segments' (list of strings)\n"
-                f"- 'pain_points' (list of strings)\n"
-                f"- 'customer_goals' (list of strings)\n"
-                f"- 'buying_behaviour' (list of strings)\n"
-                f"- 'feature_demand' (list of objects: 'feature', 'priority', 'reason')\n"
-                f"- 'customer_journey' (list of strings)\n\n"
-                f"Evidence:\n{raw_text}\n"
-            )
-            return p
-
-        prompt = generate_prompt(top_snippets)
-
-        logger.info("CustomerAgent: Requesting LLM extraction for customer insights (personas, sentiment, pain points).")
+        parsed_analysis = {
+            "target_customer_segments": [],
+            "pain_points": [],
+            "customer_goals": [],
+            "buying_behaviour": [],
+            "feature_demand": [],
+            "customer_journey": []
+        }
         
-        parsed_analysis = None
-        max_retries = 3
-        last_error = None
+        for s in top_snippets:
+            sentences = [sen.strip() for sen in s.split('.') if sen.strip()]
+            for sen in sentences:
+                sen_lower = sen.lower()
+                insight = self._extract_core_insight(sen)
+                if not insight: continue
+                
+                # Target customer segments
+                if any(kw in sen_lower for kw in ["target", "audience", "demographic", "users who", "focus on", "user", "customer", "client", "consumer", "buyer"]):
+                    if insight not in parsed_analysis["target_customer_segments"]:
+                        parsed_analysis["target_customer_segments"].append(insight)
+                # Pain points
+                if any(kw in sen_lower for kw in ["pain", "struggle", "difficult", "hard to", "challenge", "problem"]):
+                    if insight not in parsed_analysis["pain_points"]:
+                        parsed_analysis["pain_points"].append(insight)
+                # Customer goals
+                if any(kw in sen_lower for kw in ["goal", "achieve", "want to", "looking for", "desire"]):
+                    if insight not in parsed_analysis["customer_goals"]:
+                        parsed_analysis["customer_goals"].append(insight)
+                # Buying behavior
+                if any(kw in sen_lower for kw in ["buy", "purchase", "spend", "willing to pay", "budget", "cost"]):
+                    if insight not in parsed_analysis["buying_behaviour"]:
+                        parsed_analysis["buying_behaviour"].append(insight)
+                # Feature demand
+                if any(kw in sen_lower for kw in ["need", "require", "feature", "must have", "demand"]):
+                    parsed_analysis["feature_demand"].append({
+                        "feature": insight,
+                        "priority": "High" if "must" in sen_lower or "crucial" in sen_lower else "Medium",
+                        "reason": sen[:100] + "..." if len(sen) > 100 else sen
+                    })
+                # Customer journey
+                if any(kw in sen_lower for kw in ["journey", "process", "step", "first", "then", "flow"]):
+                    if insight not in parsed_analysis["customer_journey"]:
+                        parsed_analysis["customer_journey"].append(insight)
+                        
+        # Cap list sizes
+        parsed_analysis["target_customer_segments"] = parsed_analysis["target_customer_segments"][:5]
+        parsed_analysis["pain_points"] = parsed_analysis["pain_points"][:5]
+        parsed_analysis["customer_goals"] = parsed_analysis["customer_goals"][:5]
+        parsed_analysis["buying_behaviour"] = parsed_analysis["buying_behaviour"][:3]
+        parsed_analysis["feature_demand"] = parsed_analysis["feature_demand"][:5]
+        parsed_analysis["customer_journey"] = parsed_analysis["customer_journey"][:3]
         
-        for attempt in range(max_retries):
-            try:
-                raw_response = await asyncio.wait_for(
-                    self.llm_client.generate_response(
-                        system_prompt="You are a factual data extractor. Return ONLY valid JSON.",
-                        user_prompt=prompt if attempt == 0 else f"{prompt}\n\nWARNING: Your previous response was invalid JSON. Please fix formatting: {last_error}",
-                        response_format={"type": "json_object"}
-                    ),
-                    timeout=timeout_seconds
-                )
-                parsed_analysis = safe_parse_llm_json(raw_response)
-                logger.info(f"CustomerAgent: LLM data extraction successful on attempt {attempt + 1}.")
-                break
-            except asyncio.TimeoutError:
-                logger.error(f"CustomerAgent: LLM timeout on attempt {attempt + 1} after {timeout_seconds}s.")
-                last_error = "LLM Timeout"
-                if attempt == 0 and len(top_snippets) > 2:
-                    logger.info("CustomerAgent: Retrying with top 2 snippets to reduce context.")
-                    top_snippets = top_snippets[:2]
-                    prompt = generate_prompt(top_snippets)
-                else:
-                    break
-            except MalformedLLMOutputError as e:
-                logger.warning(f"CustomerAgent: Malformed JSON output on attempt {attempt + 1}: {e}")
-                last_error = str(e)
-            except Exception as exc:
-                logger.error(f"CustomerAgent: LLM analysis API call failed on attempt {attempt + 1}: {exc}.")
-                last_error = str(exc)
-                break # Break on network/API errors, only retry on JSON parsing failures
-
-        if not parsed_analysis:
-            self.status = "timeout" if last_error == "LLM Timeout" else "failed"
-            logger.error(f"Customer Segmentation Agent: All retries failed. Last error: {last_error}. Degrading gracefully.")
-            parsed_analysis = {
-                "customer_validation_metrics": {
-                    "validation_score": 0,
-                    "confidence": "Low",
-                    "summary": f"LLM failure or malformed JSON: {last_error}"
-                }
-            }
+        logger.info("CustomerAgent: Extracted customer insights using deterministic python logic.")
 
         logger.info("CustomerAgent: Validating and structuring response generation.")
 
-        def dedupe_list(raw_list):
-            val_list = self._validate_and_coerce_list(raw_list)
-            return list(dict.fromkeys(val_list))
-
-        target_customer_segments = dedupe_list(parsed_analysis.get("target_customer_segments"))
-        pain_points = dedupe_list(parsed_analysis.get("pain_points"))
-        customer_goals = dedupe_list(parsed_analysis.get("customer_goals"))
-        buying_behaviour = dedupe_list(parsed_analysis.get("buying_behaviour"))
-        customer_journey = dedupe_list(parsed_analysis.get("customer_journey"))
+        target_customer_segments = self._dedupe_list(parsed_analysis.get("target_customer_segments"))
+        pain_points = self._dedupe_list(parsed_analysis.get("pain_points"))
+        customer_goals = self._dedupe_list(parsed_analysis.get("customer_goals"))
+        buying_behaviour = self._dedupe_list(parsed_analysis.get("buying_behaviour"))
+        customer_journey = self._dedupe_list(parsed_analysis.get("customer_journey"))
         
         unmet_needs = []
         validated_sentiment = {
@@ -215,19 +232,37 @@ class CustomerAgent:
             "positive_factors": [],
             "negative_factors": []
         }
-        validated_metrics = {
-            "validation_score": 0,
-            "confidence": "Medium",
-            "summary": "Validation delegated to Comparison Agent."
-        }
 
         # Map factual outputs into the existing persona schema
         validated_personas = []
         if target_customer_segments or pain_points or customer_goals or buying_behaviour:
+            demographics = "25-45"
+            occupation = "Professionals"
+            location = "Urban/Suburban"
+            income = "Middle to High"
+            budget = "Flexible"
+            decision_drivers = ["Value for money", "Ease of use"]
+            
+            for seg in target_customer_segments:
+                seg_lower = seg.lower()
+                if any(x in seg_lower for x in ["student", "teen", "college", "university", "gen z"]): demographics = "18-24"; occupation = "Student"; income = "Low to Middle"; budget = "Price-sensitive"
+                elif any(x in seg_lower for x in ["senior", "elderly", "retiree", "boomer"]): demographics = "65+"; occupation = "Retired"; decision_drivers = ["Simplicity", "Reliability"]
+                elif any(x in seg_lower for x in ["b2b", "enterprise", "business", "company", "corporate", "agency"]): demographics = "30-55"; occupation = "Business Owner / Executive"; income = "High"; budget = "High / ROI-driven"; decision_drivers = ["Efficiency", "Scalability", "ROI"]
+                elif any(x in seg_lower for x in ["mom", "parent", "dad", "family", "children"]): demographics = "30-50"; occupation = "Working Parent"; budget = "Moderate"; decision_drivers = ["Time-saving", "Safety", "Value"]
+                elif any(x in seg_lower for x in ["developer", "engineer", "programmer", "it pro"]): occupation = "Software Engineer"; decision_drivers = ["Flexibility", "Performance", "Customization"]
+                if "rural" in seg_lower: location = "Rural"
+                if "global" in seg_lower or "international" in seg_lower: location = "Global"
+
+            persona_name = target_customer_segments[0].title() if target_customer_segments else "Primary Customer Profile"
+
             validated_personas.append({
-                "name": "Primary Customer Profile",
-                "demographics": "Unknown",
-                "occupation": "Unknown",
+                "name": persona_name,
+                "demographics": demographics,
+                "occupation": occupation,
+                "location": location,
+                "income": income,
+                "budget": budget,
+                "decision_drivers": decision_drivers,
                 "goals": customer_goals,
                 "pain_points": pain_points,
                 "buying_behaviour": ", ".join(buying_behaviour) if buying_behaviour else "Unknown"
@@ -249,6 +284,28 @@ class CustomerAgent:
                         "priority": str(f.get("priority") or "Medium"),
                         "reason": str(f.get("reason") or "No reason provided.")
                     })
+
+        score = 0
+        if target_customer_segments: score += 25
+        if pain_points: score += 25
+        if validated_personas: score += 25
+        if validated_demand: score += 25
+        
+        if score == 100:
+            confidence = "High"
+            summary = "Strong evidence found for customer segments, pain points, and feature demand."
+        elif score >= 50:
+            confidence = "Medium"
+            summary = "Partial evidence found for target customer profile."
+        else:
+            confidence = "Low"
+            summary = "Insufficient evidence to validate customer segments."
+
+        validated_metrics = {
+            "validation_score": score,
+            "confidence": confidence,
+            "summary": summary
+        }
 
         if self.status not in ["failed", "timeout"]:
             self.status = "success"
@@ -276,9 +333,9 @@ class CustomerAgent:
         }
         logger.info(f"CustomerAgent Processing Stats: {stats}")
 
-        logger.info(f"--- CUSTOMER AGENT COMPLETE PAYLOAD ---")
-        logger.info(json.dumps(analysis, indent=2))
-        logger.info("---------------------------------------")
+        logger.debug(f"--- CUSTOMER AGENT COMPLETE PAYLOAD ---")
+        logger.debug(json.dumps(analysis, indent=2))
+        logger.debug("---------------------------------------")
 
         logger.info("CustomerAgent: Successful completion. Output ready for downstream agents.")
         self.context["customer_analysis"] = analysis

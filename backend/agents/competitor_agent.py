@@ -5,7 +5,7 @@ competitor_agent.py
 Purpose:
 Milestone 2 — Competitor Discovery & Comparison Agent.
 Identifies existing competitors, compares their offerings, and highlights
-market gaps for the startup idea being validated using LLM inference over raw search data.
+market gaps for the startup idea being validated using deterministic evidence extraction over raw search data.
 """
 
 import asyncio
@@ -13,10 +13,20 @@ import logging
 import json
 import time
 import hashlib
+import re
+from urllib.parse import urlparse
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 from core.config import settings
-from utils.error_handler import safe_parse_llm_json, MalformedLLMOutputError
+
+_REVIEW_DOMAINS = [
+    "g2", "capterra", "trustpilot", "forbes", "techradar", "techcrunch", "pcmag", "gartner", 
+    "ycombinator", "reddit", "quora", "medium", "softwareadvice", "getapp", "pinterest", 
+    "cnbc", "researchgate", "businessresearchcompany", "grandviewresearch", "bloomberg", 
+    "reuters", "wsj", "nytimes", "wired", "theverge", "statista", "sourceforge", "github", 
+    "wikipedia", "slant", "alternativeto", "trustradius", "producthunt", "news", "blog", 
+    "directory", "list", "top", "best"
+]
 
 logger = logging.getLogger("competitor_agent")
 
@@ -29,9 +39,8 @@ class CompetitorAgent:
     Operates as a decentralized node in the A2A Mesh Network.
     """
 
-    def __init__(self, shared_context: dict, llm_client=None):
+    def __init__(self, shared_context: dict):
         self.context = shared_context
-        self.llm_client = llm_client
         self.peers = {}
         self._analysis_task = None
         self.status = "idle" # States: idle, started, success, failed, timeout
@@ -74,7 +83,7 @@ class CompetitorAgent:
     async def _perform_analysis(self):
         """Pulls required data from peers and runs the analysis."""
         self.status = "started"
-        start_time = time.time()
+        start_time = time.perf_counter()
         correlation_id = self.context.get("correlation_id", "N/A")
         log_prefix = f"[{correlation_id}] CompetitorAgent:"
         
@@ -88,18 +97,18 @@ class CompetitorAgent:
             result = await self.analyze(log_prefix)
             self.status = "success"
             
-            duration = time.time() - start_time
+            duration = time.perf_counter() - start_time
             logger.info(f"{log_prefix} Completed successfully in {duration:.2f}s.")
             return result
             
         except asyncio.TimeoutError as e:
             self.status = "timeout"
-            duration = time.time() - start_time
+            duration = time.perf_counter() - start_time
             logger.error(f"{log_prefix} Timed out after {duration:.2f}s: {e}")
             return self._return_degraded("Analysis timed out.", "Low")
         except Exception as e:
             self.status = "failed"
-            duration = time.time() - start_time
+            duration = time.perf_counter() - start_time
             logger.exception(f"{log_prefix} Failed unexpectedly after {duration:.2f}s: {e}")
             return self._return_degraded(f"Unexpected failure: {str(e)}", "Low")
 
@@ -184,75 +193,100 @@ class CompetitorAgent:
         competitor_snippets.sort(key=lambda x: (x["relevance"], x["length"]), reverse=True)
         top_snippets = competitor_snippets[:max_snippets]
         
-        def generate_prompt(snippets_list):
-            raw_text_parts = []
-            for s in snippets_list:
-                raw_text_parts.append(f"Source: {s['url']} | Title: {s['title']}\nContent: {s['content'][:max_snippet_length]}")
-            raw_text = "\n\n".join(raw_text_parts)
+        parsed_analysis = {"competitors": []}
+
+        for s in top_snippets:
+            title = s.get("title", "")
+            content = s.get("content", "")
+            url = s.get("url", "")
             
-            p = (
-                f"Extract competitor facts for startup idea: '{idea}'.\n"
-                f"RULES:\n"
-                f"1. Extract ONLY competitor name, features, pricing, and source URLs.\n"
-                f"2. Use ONLY explicit facts from evidence. Do NOT explain or reason.\n"
-                f"3. If unavailable, return 'Unknown'.\n\n"
-                f"Output strictly as a JSON object containing exactly these keys:\n"
-                f"- 'competitors': an array of objects. Each object MUST have:\n"
-                f"  - 'name' (string)\n"
-                f"  - 'features' (list of strings)\n"
-                f"  - 'pricing' (string)\n"
-                f"  - 'source_references' (list of strings)\n\n"
-                f"Evidence:\n{raw_text}\n"
-            )
-            return p, raw_text
-
-        prompt, raw_text = generate_prompt(top_snippets)
-
-        est_tokens = len(raw_text) // 4
-        logger.info(f"{log_prefix} Requesting LLM extraction. Snippets: {len(top_snippets)}, Context Size: {len(raw_text)} chars (~{est_tokens} tokens).")
-        
-        parsed_analysis = None
-        max_retries = settings.agent.COMPETITOR_MAX_RETRIES
-        base_backoff = 2
-        last_error = None
-        llm_start = time.time()
-        timeout_seconds = settings.agent.COMPETITOR_LLM_TIMEOUT
-        
-        for attempt in range(max_retries):
+            name = "Unknown"
+            
             try:
-                raw_response = await asyncio.wait_for(
-                    self.llm_client.generate_response(
-                        system_prompt="You are an expert competitive intelligence specialist. Return ONLY valid JSON.",
-                        user_prompt=prompt if attempt == 0 else f"{prompt}\n\nWARNING: Your previous response was invalid JSON. Please fix formatting: {last_error}"
-                    ),
-                    timeout=timeout_seconds
-                )
-                parsed_analysis = safe_parse_llm_json(raw_response)
-                logger.info(f"{log_prefix} LLM data extraction successful on attempt {attempt + 1}.")
-                break
-            except asyncio.TimeoutError:
-                logger.error(f"{log_prefix} LLM timeout on attempt {attempt + 1} after {timeout_seconds}s.")
-                last_error = "LLM Timeout"
-                if attempt == 0 and len(top_snippets) > 2:
-                    logger.info(f"{log_prefix} Retrying with top 2 snippets to reduce context.")
-                    top_snippets = top_snippets[:2]
-                    prompt, _ = generate_prompt(top_snippets)
+                domain = urlparse(url).netloc.lower()
+                domain_parts = domain.replace("www.", "").split(".")
+                domain_name = domain_parts[0] if len(domain_parts) > 0 else ""
+                
+                if domain_name and domain_name not in _REVIEW_DOMAINS and len(domain_name) > 2:
+                    name = domain_name.capitalize()
                 else:
-                    break
-            except MalformedLLMOutputError as e:
-                logger.warning(f"{log_prefix} Malformed JSON output on attempt {attempt + 1}: {e}")
-                last_error = str(e)
-            except Exception as exc:
-                logger.error(f"{log_prefix} LLM analysis API call failed on attempt {attempt + 1}: {exc}.")
-                last_error = str(exc)
-                break 
-
-        llm_duration = time.time() - llm_start
-        logger.info(f"{log_prefix} LLM extraction latency: {llm_duration:.2f}s (Attempts: {attempt + 1}/{max_retries})")
-
-        if not parsed_analysis or not isinstance(parsed_analysis, dict):
-            logger.error(f"{log_prefix} All retries failed or invalid format. Last error: {last_error}. Degrading gracefully.")
-            return self._return_degraded(f"LLM extraction failed: {last_error}", "Low")
+                    path = urlparse(url).path.lower()
+                    path_parts = [p for p in path.split("/") if p]
+                    
+                    if "products" in path_parts or "software" in path_parts:
+                        for i, p in enumerate(path_parts):
+                            if p in ["products", "software", "reviews", "app"] and i + 1 < len(path_parts):
+                                possible_name = path_parts[i+1].replace("-", " ")
+                                if len(possible_name) > 2:
+                                    name = possible_name.title()
+                                    break
+                                    
+                    if name == "Unknown" and title:
+                        clean_title = title.split("|")[0].split("-")[0].strip()
+                        if clean_title:
+                            lower_title = clean_title.lower()
+                            if not any(x in lower_title for x in ["best", "top", "alternatives", "vs", "software", "tools", "review"]):
+                                name = clean_title
+                            else:
+                                vs_match = re.search(r'([A-Z][a-zA-Z0-9]+)\s+vs\.?\s+([A-Z][a-zA-Z0-9]+)', title)
+                                if vs_match:
+                                    name = vs_match.group(1) if vs_match.group(1).lower() != idea.lower() else vs_match.group(2)
+            except Exception:
+                pass
+                
+            if not name or name.lower() in ["unknown", "", "home", "about", "index"]:
+                if title:
+                    fallback = title.split("|")[0].split("-")[0].strip()
+                    if fallback and len(fallback) < 25:
+                        name = fallback
+                        
+            if not name or name.lower() in ["unknown", ""]:
+                continue
+                
+            pricing = "Unknown"
+            price_match = re.search(r'\$\d+(?:\.\d+)?(?:\/mo|\/year|\/month)?|free|pricing|subscription', content, re.IGNORECASE)
+            if price_match:
+                pricing = "See Website"
+                
+            features = []
+            strengths = []
+            weaknesses = []
+            target_customers = "Unknown"
+            business_model = "Unknown"
+            
+            sentences = [sen.strip() for sen in content.split('.') if sen.strip()]
+            for sen in sentences:
+                clean_sen = sen[:100] + "..." if len(sen) > 100 else sen
+                lower_sen = sen.lower()
+                if any(kw in lower_sen for kw in ["offer", "feature", "provide", "platform", "tool", "solution", "support", "allow"]):
+                    if len(sen) > 15 and clean_sen not in features:
+                        features.append(clean_sen)
+                if any(kw in lower_sen for kw in ["strength", "best for", "excel at", "pro", "advantage", "stand out"]):
+                    if len(sen) > 15 and clean_sen not in strengths:
+                        strengths.append(clean_sen)
+                if any(kw in lower_sen for kw in ["weakness", "bad", "lack", "con", "disadvantage", "struggle", "complain", "fail"]):
+                    if len(sen) > 15 and clean_sen not in weaknesses:
+                        weaknesses.append(clean_sen)
+                if target_customers == "Unknown" and any(kw in lower_sen for kw in ["target", "designed for", "aimed at", "users", "audience"]):
+                    target_customers = clean_sen
+                if business_model == "Unknown" and any(kw in lower_sen for kw in ["freemium", "subscription", "enterprise", "b2b", "b2c", "saas"]):
+                    if "freemium" in lower_sen: business_model = "Freemium"
+                    elif "subscription" in lower_sen: business_model = "Subscription"
+                    elif "saas" in lower_sen: business_model = "SaaS"
+                    else: business_model = "B2B/Enterprise"
+                        
+            parsed_analysis["competitors"].append({
+                "name": name,
+                "features": features[:3],
+                "pricing": pricing,
+                "strengths": strengths[:3],
+                "weaknesses": weaknesses[:3],
+                "target_customers": target_customers,
+                "business_model": business_model,
+                "source_references": [url]
+            })
+            
+        logger.info(f"{log_prefix} Extracted competitor analysis using deterministic python logic.")
 
         logger.info(f"{log_prefix} Validating and structuring response generation.")
 
@@ -279,20 +313,32 @@ class CompetitorAgent:
                 continue
                 
             name_lower = name.lower()
-            if name_lower in competitor_map:
-                # Merge duplicate
-                existing = competitor_map[name_lower]
-                existing["features"] = list(set(existing["features"] + self._validate_and_coerce_list(comp.get("features"))))
-                existing["source_references"] = list(set(existing["source_references"] + self._validate_and_coerce_list(comp.get("source_references"))))
-                if existing["pricing"] in ["Pricing unavailable", "Unavailable", "Unknown"] and comp.get("pricing") not in [None, "Pricing unavailable", "Unavailable", "Unknown"]:
-                    existing["pricing"] = str(comp.get("pricing"))
-                comps_merged += 1
-                continue
-                
             features = self._validate_and_coerce_list(comp.get("features"))
             source_references = self._validate_and_coerce_list(comp.get("source_references"))
             pricing = str(comp.get("pricing") or "Unknown")
-            
+            strengths = self._validate_and_coerce_list(comp.get("strengths"))
+            weaknesses = self._validate_and_coerce_list(comp.get("weaknesses"))
+            target_customers = str(comp.get("target_customers") or "Unavailable")
+            business_model = str(comp.get("business_model") or "Unavailable")
+
+            if name_lower in competitor_map:
+                # Merge duplicate
+                existing = competitor_map[name_lower]
+                existing["features"] = list(dict.fromkeys(existing["features"] + features))
+                existing["source_references"] = list(dict.fromkeys(existing["source_references"] + source_references))
+                existing["strengths"] = list(dict.fromkeys(existing["strengths"] + strengths))
+                existing["weaknesses"] = list(dict.fromkeys(existing["weaknesses"] + weaknesses))
+                
+                if existing["pricing"] in ["Pricing unavailable", "Unavailable", "Unknown", ""] and pricing not in [None, "Pricing unavailable", "Unavailable", "Unknown", ""]:
+                    existing["pricing"] = pricing
+                if existing.get("target_customers") in ["Unavailable", "Unknown", ""] and target_customers not in [None, "Unavailable", "Unknown", ""]:
+                    existing["target_customers"] = target_customers
+                if existing.get("business_model") in ["Unavailable", "Unknown", ""] and business_model not in [None, "Unavailable", "Unknown", ""]:
+                    existing["business_model"] = business_model
+                    
+                comps_merged += 1
+                continue
+                
             # Generate summary in Python
             summary = f"Provides {', '.join(features[:3])}." if features else "Product details unknown."
             
@@ -306,11 +352,11 @@ class CompetitorAgent:
                 "product_summary": summary,
                 "features": features,
                 "pricing": pricing,
-                "business_model": "Unavailable",
+                "business_model": business_model,
                 "market_positioning": "Unknown",
-                "target_customers": "Unavailable",
-                "strengths": [],
-                "weaknesses": [],
+                "target_customers": target_customers,
+                "strengths": strengths,
+                "weaknesses": weaknesses,
                 "source_references": source_references,
                 "confidence_score": comp_confidence
             }
@@ -347,9 +393,9 @@ class CompetitorAgent:
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
-        logger.info(f"--- COMPETITOR AGENT COMPLETE PAYLOAD ---")
-        logger.info(json.dumps(analysis, indent=2))
-        logger.info("-----------------------------------------")
+        logger.debug(f"--- COMPETITOR AGENT COMPLETE PAYLOAD ---")
+        logger.debug(json.dumps(analysis, indent=2))
+        logger.debug("-----------------------------------------")
 
         logger.info("CompetitorAgent: Successful completion. Output ready for downstream agents.")
         self.context["competitor_analysis"] = analysis
