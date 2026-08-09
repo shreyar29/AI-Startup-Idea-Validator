@@ -1,11 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { 
-  Sparkles, ArrowRight, Loader2, Search, Target, Users, 
+  Sparkles, ArrowRight, Search, Target, Users, 
   BrainCircuit, CheckCircle2, Lightbulb, LineChart, ShieldCheck
 } from 'lucide-react';
-import { validateIdea } from '../services/api';
 
 const SUGGESTIONS = [
   { industry: "Cybersecurity", title: "SOC2 Automation", desc: "A B2B SaaS platform that automates SOC2 compliance for startups." },
@@ -43,15 +42,24 @@ const VALUE_PREVIEW = [
 const Home = () => {
   const [idea, setIdea] = useState('');
   const [isFocused, setIsFocused] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [modifierKey, setModifierKey] = useState('⌘');
   const navigate = useNavigate();
   const textareaRef = useRef(null);
 
   useEffect(() => {
+    if (typeof navigator !== 'undefined') {
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0 || navigator.userAgent.toUpperCase().indexOf('MAC') >= 0;
+      setModifierKey(isMac ? '⌘' : 'Ctrl');
+    }
+  }, []);
+
+  useEffect(() => {
     if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.max(160, textareaRef.current.scrollHeight)}px`;
+      textareaRef.current.style.height = '160px';
+      const scrollHeight = textareaRef.current.scrollHeight;
+      if (scrollHeight > 160) {
+        textareaRef.current.style.height = `${scrollHeight}px`;
+      }
     }
   }, [idea]);
 
@@ -66,16 +74,8 @@ const Home = () => {
     <div className="relative min-h-[calc(100vh-4rem)] flex flex-col items-center justify-start overflow-x-hidden pt-8 pb-16">
       {/* Background elements */}
       <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden bg-background">
-        <motion.div 
-          animate={{ rotate: 360 }}
-          transition={{ duration: 150, repeat: Infinity, ease: "linear" }}
-          className="absolute top-[-20%] left-[10%] w-[800px] h-[800px] bg-primary/5 rounded-full blur-[120px] opacity-60" 
-        />
-        <motion.div 
-          animate={{ rotate: -360 }}
-          transition={{ duration: 200, repeat: Infinity, ease: "linear" }}
-          className="absolute top-[30%] right-[-10%] w-[600px] h-[600px] bg-blue-500/5 rounded-full blur-[100px] opacity-40" 
-        />
+        <div className="absolute top-[-20%] left-[10%] w-[800px] h-[800px] bg-primary/5 rounded-full blur-[120px] opacity-60 pointer-events-none" />
+        <div className="absolute top-[30%] right-[-10%] w-[600px] h-[600px] bg-blue-500/5 rounded-full blur-[100px] opacity-40 pointer-events-none" />
         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_80%_80%_at_50%_0%,#000_60%,transparent_100%)]" />
       </div>
       
@@ -93,7 +93,7 @@ const Home = () => {
             <span>VentureLens AI Version 2.0</span>
           </div>
           
-          <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-white mb-6 leading-[1.1]">
+          <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-textMain mb-6 leading-[1.1]">
             Know if your startup is <br className="hidden sm:block" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-primary to-blue-400">
               worth building.
@@ -105,7 +105,7 @@ const Home = () => {
           </p>
 
           {/* 3. Significantly increased textarea width for dominance */}
-          <form onSubmit={submitForm} className="relative max-w-5xl xl:max-w-6xl mx-auto mt-14 text-left">
+          <form onSubmit={submitForm} className="relative max-w-5xl xl:max-w-6xl mx-auto mt-10 text-left">
             {/* Glow behind textarea */}
             <div className={`absolute -inset-1 rounded-3xl blur-xl transition-all duration-500 ${isFocused ? 'bg-primary/20 opacity-100' : 'opacity-0'}`} />
             
@@ -129,22 +129,11 @@ const Home = () => {
                   }}
                   onFocus={() => setIsFocused(true)}
                   onBlur={() => setIsFocused(false)}
-                  className="w-full bg-transparent text-white resize-none outline-none p-6 pt-12 text-lg sm:text-xl font-medium leading-relaxed min-h-[160px] transition-all duration-200 overflow-hidden relative z-10 placeholder-transparent focus:ring-0"
+                  className="w-full bg-transparent text-textMain resize-none outline-none p-6 pt-12 text-lg sm:text-xl font-medium leading-relaxed min-h-[160px] transition-all duration-200 overflow-hidden relative z-10 placeholder-transparent focus:ring-0"
                   maxLength={1000}
                   required
-                  disabled={isLoading}
                 />
               </div>
-
-              <AnimatePresence>
-                {error && (
-                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="px-6 sm:px-8 pb-4">
-                    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-sm text-red-400 font-medium">
-                      {error}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
 
               {/* Footer of Textarea */}
               <div className="flex flex-col sm:flex-row justify-between items-center gap-4 px-6 pb-6 pt-4 border-t border-white/5 bg-black/20">
@@ -154,26 +143,17 @@ const Home = () => {
                     {idea.length} <span className="opacity-40">/ 1000 characters</span>
                   </span>
                   <span className="hidden sm:inline text-[11px] text-textMuted/40 font-mono tracking-widest uppercase mt-0.5">
-                    Press ⌘ ↵ to analyze
+                    Press {modifierKey} ↵ to analyze
                   </span>
                 </div>
                 
                 <button
                   type="submit"
-                  disabled={idea.trim().length < 10 || isLoading}
+                  disabled={idea.trim().length < 10}
                   className="relative group w-full sm:w-auto overflow-hidden inline-flex items-center justify-center gap-2 bg-white text-background hover:bg-gray-100 disabled:bg-surface disabled:text-textMuted disabled:cursor-not-allowed px-8 py-3.5 rounded-xl font-bold transition-all duration-300 shadow-md hover:shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:shadow-none"
                 >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      <span>Analyzing Market...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="relative z-10">Analyze My Startup</span>
-                      <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform relative z-10" />
-                    </>
-                  )}
+                  <span className="relative z-10">Analyze My Startup</span>
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform relative z-10" />
                 </button>
               </div>
             </div>
@@ -203,7 +183,6 @@ const Home = () => {
                   key={i}
                   type="button"
                   onClick={() => { setIdea(s.desc); setIsFocused(true); }}
-                  disabled={isLoading}
                   className="group text-left p-6 rounded-2xl bg-surface/30 border border-white/5 hover:bg-surface/50 hover:border-primary/30 hover:-translate-y-1 transition-all duration-300 relative overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-primary shadow-sm hover:shadow-lg"
                 >
                   <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -211,7 +190,7 @@ const Home = () => {
                     <div className="flex items-center gap-2 mb-4">
                       <span className="text-[10px] uppercase tracking-widest text-primary font-bold px-2.5 py-1 rounded-sm bg-primary/10">{s.industry}</span>
                     </div>
-                    <h4 className="text-white font-semibold mb-2 group-hover:text-primary transition-colors">{s.title}</h4>
+                    <h4 className="text-textMain font-semibold mb-2 group-hover:text-primary transition-colors">{s.title}</h4>
                     <p className="text-sm text-textMuted leading-relaxed">{s.desc}</p>
                   </div>
                 </button>
@@ -225,12 +204,12 @@ const Home = () => {
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-20 lg:mt-24 pt-10 border-t border-white/5 max-w-6xl xl:max-w-7xl mx-auto"
+          className="mt-16 lg:mt-20 pt-8 border-t border-white/5 max-w-6xl xl:max-w-7xl mx-auto"
         >
           <p className="text-center text-sm font-semibold text-textMuted tracking-widest uppercase mb-10">Powered By Enterprise-Grade Technology</p>
           <div className="flex flex-wrap justify-center lg:justify-between gap-x-10 gap-y-8 opacity-70 px-4 xl:px-8">
             {TRUST_ITEMS.map((item, i) => (
-              <div key={i} className="flex items-center gap-2.5 text-white font-medium text-sm sm:text-base">
+              <div key={i} className="flex items-center gap-2.5 text-textMain font-medium text-sm sm:text-base">
                 <ShieldCheck className="w-5 h-5 text-textMuted" />
                 <span>{item}</span>
               </div>
@@ -243,21 +222,21 @@ const Home = () => {
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.4, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-20 lg:mt-24 w-full max-w-6xl xl:max-w-7xl mx-auto text-left"
+          className="mt-16 lg:mt-20 w-full max-w-6xl xl:max-w-7xl mx-auto text-left"
         >
-          <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">Comprehensive AI Intelligence</h2>
+          <div className="text-center mb-12">
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-textMain mb-4">Comprehensive AI Intelligence</h2>
             <p className="text-textMuted text-lg max-w-2xl mx-auto">Four specialized AI agents analyze your idea from every angle, delivering a complete validation report in seconds.</p>
           </div>
           
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 xl:gap-10">
             {CAPABILITIES.map((cap, i) => (
               <div key={i} className="p-8 rounded-3xl bg-surface/40 border border-white/5 hover:border-primary/20 hover:bg-surface/60 transition-all duration-300 shadow-sm hover:shadow-md flex flex-col sm:flex-row gap-6 items-start">
-                <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0 text-white shadow-inner">
+                <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0 text-textMain shadow-inner">
                   <cap.icon className="w-7 h-7" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-white mb-3">{cap.title}</h3>
+                  <h3 className="text-xl font-bold text-textMain mb-3">{cap.title}</h3>
                   <p className="text-textMuted leading-relaxed">{cap.desc}</p>
                 </div>
               </div>
@@ -270,10 +249,10 @@ const Home = () => {
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-20 lg:mt-24 mb-8 w-full max-w-6xl xl:max-w-7xl mx-auto"
+          className="mt-16 lg:mt-20 mb-8 w-full max-w-6xl xl:max-w-7xl mx-auto"
         >
-          <div className="text-center mb-20">
-            <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">How it works</h2>
+          <div className="text-center mb-16">
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-textMain mb-4">How it works</h2>
             <p className="text-textMuted text-lg max-w-2xl mx-auto">A seamless, automated pipeline from idea to validation.</p>
           </div>
           
@@ -286,7 +265,7 @@ const Home = () => {
                 <div className="w-14 h-14 rounded-full bg-surface border-4 border-background flex items-center justify-center text-primary mb-5 shadow-[0_0_20px_rgba(var(--color-primary),0.15)]">
                   <step.icon className="w-6 h-6" />
                 </div>
-                <h4 className="text-white font-bold mb-2">{step.title}</h4>
+                <h4 className="text-textMain font-bold mb-2">{step.title}</h4>
                 <p className="text-sm text-textMuted max-w-[140px] mx-auto">{step.desc}</p>
               </div>
             ))}

@@ -70,7 +70,7 @@ const ComparisonSection = ({ data }) => {
         <div className="bg-primary/10 p-2 rounded-xl">
           <Sparkles className="w-6 h-6 text-primary" />
         </div>
-        <h2 className="text-2xl font-bold text-white tracking-tight">Final Strategy</h2>
+        <h2 className="text-2xl font-bold text-textMain tracking-tight">Final Strategy</h2>
       </div>
 
       {/* 1: Executive Strategy Hero */}
@@ -102,7 +102,7 @@ const ComparisonSection = ({ data }) => {
           <p className="text-[10px] font-bold text-textMuted uppercase tracking-widest">AI Confidence</p>
           <div className="flex items-center lg:flex-col gap-2">
             <ShieldCheck className={`w-8 h-8 ${confidence.toLowerCase() === 'high' ? 'text-success' : confidence.toLowerCase() === 'medium' ? 'text-warning' : 'text-error'}`} />
-            <span className="text-3xl font-black text-white">{confidence}</span>
+            <span className="text-3xl font-black text-textMain">{confidence}</span>
           </div>
         </div>
       </div>
@@ -114,7 +114,7 @@ const ComparisonSection = ({ data }) => {
           <h3 className="text-[10px] font-bold text-primary uppercase tracking-widest mb-4 flex items-center gap-2 relative z-10">
             <Trophy className="w-3.5 h-3.5" /> Biggest Competitive Advantage
           </h3>
-          <p className="text-base md:text-lg font-bold text-white leading-relaxed relative z-10 flex-grow">
+          <p className="text-base md:text-lg font-bold text-textMain leading-relaxed relative z-10 flex-grow">
             {competitiveAdvantage}
           </p>
         </div>
@@ -124,7 +124,7 @@ const ComparisonSection = ({ data }) => {
           <h3 className="text-[10px] font-bold text-error uppercase tracking-widest mb-4 flex items-center gap-2 relative z-10">
             <AlertTriangle className="w-3.5 h-3.5" /> Biggest Risk
           </h3>
-          <p className="text-base md:text-lg font-bold text-white leading-relaxed relative z-10 flex-grow">
+          <p className="text-base md:text-lg font-bold text-textMain leading-relaxed relative z-10 flex-grow">
             {biggestRisk}
           </p>
         </div>
@@ -134,7 +134,7 @@ const ComparisonSection = ({ data }) => {
           <h3 className="text-[10px] font-bold text-success uppercase tracking-widest mb-4 flex items-center gap-2 relative z-10">
             <Zap className="w-3.5 h-3.5" /> Immediate Next Action
           </h3>
-          <p className="text-base md:text-lg font-bold text-white leading-relaxed relative z-10 flex-grow">
+          <p className="text-base md:text-lg font-bold text-textMain leading-relaxed relative z-10 flex-grow">
             {immediateAction}
           </p>
         </div>
@@ -143,7 +143,7 @@ const ComparisonSection = ({ data }) => {
           <h3 className="text-[10px] font-bold text-textMuted uppercase tracking-widest mb-4 flex items-center gap-2 relative z-10">
             <Map className="w-3.5 h-3.5 text-primary" /> Long-Term Strategic Direction
           </h3>
-          <p className="text-base md:text-lg font-bold text-white leading-relaxed relative z-10 flex-grow">
+          <p className="text-base md:text-lg font-bold text-textMain leading-relaxed relative z-10 flex-grow">
             {longTermDirection}
           </p>
         </div>

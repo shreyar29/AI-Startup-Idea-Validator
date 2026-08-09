@@ -39,7 +39,7 @@ const CompetitorSection = ({ data }) => {
         <div className="bg-primary/10 p-2 rounded-xl">
           <Crosshair className="w-6 h-6 text-primary" />
         </div>
-        <h2 className="text-2xl font-bold text-white tracking-tight">Competitive Intelligence</h2>
+        <h2 className="text-2xl font-bold text-textMain tracking-tight">Competitive Intelligence</h2>
       </div>
 
       {/* 1: Competitive Landscape Hero */}
@@ -66,7 +66,7 @@ const CompetitorSection = ({ data }) => {
             </h3>
             <div className="flex flex-col gap-4">
               {gapAnalysis.length > 0 ? gapAnalysis.map((gap, i) => (
-                <div key={i} className="text-sm md:text-base font-medium text-white leading-relaxed border-l-4 border-primary/50 pl-4 py-1">
+                <div key={i} className="text-sm md:text-base font-medium text-textMain leading-relaxed border-l-4 border-primary/50 pl-4 py-1">
                   {gap}
                 </div>
               )) : (
@@ -89,71 +89,88 @@ const CompetitorSection = ({ data }) => {
             <div key={i} className="glass-panel p-8 rounded-3xl flex flex-col shadow-lg border-border/50 bg-gradient-to-br from-surface to-background/50 hover:border-border transition-colors">
               
               {/* Competitor Header */}
-              <div className="flex justify-between items-start mb-8 border-b border-border/30 pb-6">
-                <div className="flex items-center gap-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-8 border-b border-border/30 pb-6">
+                <div className="flex items-center gap-4 max-w-full">
                   <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-surface to-background border border-border flex items-center justify-center text-2xl font-black text-white shadow-inner flex-shrink-0">
                     {comp.name ? comp.name.charAt(0).toUpperCase() : '?'}
                   </div>
-                  <div>
-                    <h3 className="text-xl md:text-2xl font-extrabold text-white tracking-tight">{comp.name || 'Unknown Competitor'}</h3>
-                    {comp.target_customers && comp.target_customers !== "Unavailable" && (
+                  <div className="min-w-0">
+                    <h3 className="text-xl md:text-2xl font-extrabold text-textMain tracking-tight truncate">{comp.name || 'Unknown Competitor'}</h3>
+                    {comp.target_customers && comp.target_customers !== "Unavailable" && comp.target_customers !== "Unknown" && (
                       <p className="text-[10px] uppercase font-bold text-textMuted tracking-wider mt-1 line-clamp-1">{comp.target_customers}</p>
                     )}
                   </div>
                 </div>
-                {comp.pricing && comp.pricing !== "Unknown" && (
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-success/10 rounded-xl border border-success/20 flex-shrink-0 shadow-sm">
-                    <DollarSign className="w-3.5 h-3.5 text-success" />
-                    <span className="text-xs font-bold text-success uppercase tracking-wider">{comp.pricing}</span>
-                  </div>
-                )}
+                
+                <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+                  {comp.business_model && comp.business_model !== "Unknown" && (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 rounded-xl border border-primary/20 shadow-sm max-w-[150px]">
+                      <Activity className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                      <span className="text-xs font-bold text-primary uppercase tracking-wider truncate">{comp.business_model}</span>
+                    </div>
+                  )}
+                  {comp.pricing && comp.pricing !== "Unknown" && (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-success/10 rounded-xl border border-success/20 shadow-sm max-w-[150px]">
+                      <DollarSign className="w-3.5 h-3.5 text-success flex-shrink-0" />
+                      <span className="text-xs font-bold text-success uppercase tracking-wider truncate">{comp.pricing}</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-8 flex-grow">
                 {/* 4: Strengths & Weaknesses (Premium Cards) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-success/5 border border-success/10 rounded-2xl p-5 shadow-inner">
-                    <h4 className="text-[10px] font-bold text-success uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                      <Shield className="w-3.5 h-3.5" /> Core Strengths
-                    </h4>
-                    <ul className="space-y-3">
-                      {comp.strengths && comp.strengths.length > 0 ? comp.strengths.map((str, j) => (
-                        <li key={j} className="text-xs font-medium text-textMain leading-relaxed flex items-start gap-2.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-success mt-1 flex-shrink-0"></span>
-                          {str}
-                        </li>
-                      )) : <li className="text-xs text-textDim italic">No dominant strengths identified.</li>}
-                    </ul>
-                  </div>
+                {(comp.strengths?.length > 0 || comp.weaknesses?.length > 0) && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {comp.strengths?.length > 0 && (
+                      <div className="bg-success/5 border border-success/10 rounded-2xl p-5 shadow-inner">
+                        <h4 className="text-[10px] font-bold text-success uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                          <Shield className="w-3.5 h-3.5" /> Core Strengths
+                        </h4>
+                        <ul className="space-y-3">
+                          {comp.strengths.map((str, j) => (
+                            <li key={j} className="text-xs font-medium text-textMain leading-relaxed flex items-start gap-2.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-success mt-1 flex-shrink-0"></span>
+                              {str}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
 
-                  <div className="bg-error/5 border border-error/10 rounded-2xl p-5 shadow-inner">
-                    <h4 className="text-[10px] font-bold text-error uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                      <AlertTriangle className="w-3.5 h-3.5" /> Critical Weaknesses
-                    </h4>
-                    <ul className="space-y-3">
-                      {comp.weaknesses && comp.weaknesses.length > 0 ? comp.weaknesses.map((wk, j) => (
-                        <li key={j} className="text-xs font-medium text-textMain leading-relaxed flex items-start gap-2.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-error mt-1 flex-shrink-0"></span>
-                          {wk}
-                        </li>
-                      )) : <li className="text-xs text-textDim italic">No obvious weaknesses identified.</li>}
-                    </ul>
+                    {comp.weaknesses?.length > 0 && (
+                      <div className="bg-error/5 border border-error/10 rounded-2xl p-5 shadow-inner">
+                        <h4 className="text-[10px] font-bold text-error uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                          <AlertTriangle className="w-3.5 h-3.5" /> Critical Weaknesses
+                        </h4>
+                        <ul className="space-y-3">
+                          {comp.weaknesses.map((wk, j) => (
+                            <li key={j} className="text-xs font-medium text-textMain leading-relaxed flex items-start gap-2.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-error mt-1 flex-shrink-0"></span>
+                              {wk}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
-                </div>
+                )}
 
                 {/* Key Features (Tag Cloud) */}
-                <div>
-                  <h4 className="text-[10px] font-bold text-textMuted uppercase tracking-widest mb-4 flex items-center gap-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-primary"/> Key Capabilities
-                  </h4>
-                  <div className="flex flex-wrap gap-2">
-                    {Array.isArray(comp.features) && comp.features.length > 0 ? comp.features.map((feat, j) => (
-                      <span key={j} className="text-[10px] font-bold uppercase tracking-wider text-textMain bg-surface border border-border/80 px-3 py-1.5 rounded-lg shadow-sm">
-                        {feat}
-                      </span>
-                    )) : <span className="text-xs text-textDim italic">No features identified</span>}
+                {Array.isArray(comp.features) && comp.features.length > 0 && (
+                  <div>
+                    <h4 className="text-[10px] font-bold text-textMuted uppercase tracking-widest mb-4 flex items-center gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-primary"/> Key Capabilities
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {comp.features.map((feat, j) => (
+                        <div key={j} className="text-[10px] font-bold uppercase tracking-wider text-textMain bg-surface border border-border/80 px-3 py-1.5 rounded-lg shadow-sm line-clamp-2 max-w-full whitespace-normal">
+                          {feat}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Differentiation field fallback if present */}
                 {comp.differentiation && (

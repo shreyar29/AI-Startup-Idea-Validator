@@ -78,7 +78,7 @@ const OverviewSection = ({ metadata, finalEval }) => {
             {/* 3: Validation Score Hero Widget */}
             <div className="flex-1 lg:flex-none glass-panel p-6 rounded-2xl border-border/50 min-w-[160px] text-center shadow-lg transition-transform hover:scale-105 duration-300">
               <p className="text-xs text-textMuted font-bold uppercase tracking-widest mb-2">Validation Score</p>
-              <p className="text-5xl font-black text-white" style={{ color: getScoreColor(score) }}>{score}</p>
+              <p className="text-5xl font-black text-textMain" style={{ color: getScoreColor(score) }}>{score}</p>
               <p className="text-[10px] text-textDim uppercase tracking-widest mt-2">Out of 100</p>
             </div>
             
@@ -87,7 +87,7 @@ const OverviewSection = ({ metadata, finalEval }) => {
               <p className="text-xs text-textMuted font-bold uppercase tracking-widest mb-2">AI Confidence</p>
               <div className="flex justify-center items-center gap-2 mt-1">
                 <ShieldCheck className="w-6 h-6 text-primary" />
-                <p className="text-3xl font-bold text-white">{confidence}</p>
+                <p className="text-3xl font-bold text-textMain">{confidence}</p>
               </div>
             </div>
           </aside>
@@ -101,7 +101,7 @@ const OverviewSection = ({ metadata, finalEval }) => {
             <div className="bg-primary/10 p-2 rounded-lg text-primary">
               <Target className="w-5 h-5" />
             </div>
-            <h3 className="text-xs font-bold text-white uppercase tracking-widest">Biggest Opportunity</h3>
+            <h3 className="text-xs font-bold text-textMain uppercase tracking-widest">Biggest Opportunity</h3>
           </div>
           <p className="text-textMain leading-relaxed text-sm flex-grow">{biggestOpportunity}</p>
         </div>
@@ -111,7 +111,7 @@ const OverviewSection = ({ metadata, finalEval }) => {
             <div className="bg-error/10 p-2 rounded-lg text-error">
               <AlertTriangle className="w-5 h-5" />
             </div>
-            <h3 className="text-xs font-bold text-white uppercase tracking-widest">Biggest Risk</h3>
+            <h3 className="text-xs font-bold text-textMain uppercase tracking-widest">Biggest Risk</h3>
           </div>
           <p className="text-textMain leading-relaxed text-sm flex-grow">{biggestRisk}</p>
         </div>
@@ -121,7 +121,7 @@ const OverviewSection = ({ metadata, finalEval }) => {
             <div className="bg-success/10 p-2 rounded-lg text-success">
               <ArrowRight className="w-5 h-5" />
             </div>
-            <h3 className="text-xs font-bold text-white uppercase tracking-widest">Next Action</h3>
+            <h3 className="text-xs font-bold text-textMain uppercase tracking-widest">Next Action</h3>
           </div>
           <p className="text-textMain leading-relaxed text-sm flex-grow">{nextAction}</p>
         </div>
@@ -179,7 +179,7 @@ const OverviewSection = ({ metadata, finalEval }) => {
               <Clock className="w-3.5 h-3.5" />
               <span className="text-[10px] uppercase font-bold tracking-widest">Execution</span>
             </div>
-            <span className="text-xl font-bold text-white mt-1">{metadata.execution_time_seconds}s</span>
+            <span className="text-xl font-bold text-textMain mt-1">{metadata.execution_time_seconds}s</span>
           </div>
 
           <div className="glass-panel p-5 rounded-2xl flex flex-col justify-center">
@@ -196,6 +196,26 @@ const OverviewSection = ({ metadata, finalEval }) => {
           </div>
         </div>
         
+        {finalEval?.scoring_breakdown && Object.keys(finalEval.scoring_breakdown).length > 0 && (
+          <div className="mt-6 bg-surface/20 p-6 rounded-2xl border border-border/30">
+            <h3 className="text-sm font-bold text-textMuted uppercase tracking-widest mb-4">Transparent Scoring Breakdown</h3>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              {Object.entries(finalEval.scoring_breakdown).map(([key, value]) => {
+                const displayValue = typeof value === 'object' && value !== null 
+                  ? (value.score || value.value || String(Object.values(value)[0] || ''))
+                  : String(value);
+                
+                return (
+                  <div key={key} className="glass-panel p-4 rounded-xl flex flex-col justify-center items-center text-center">
+                    <span className="text-[10px] uppercase font-bold tracking-widest text-textMuted mb-2">{key}</span>
+                    <span className="text-xl font-bold text-textMain">{displayValue}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="mt-6 bg-surface/20 p-5 rounded-xl border border-border/30">
           <span className="text-textMuted text-xs font-bold uppercase tracking-widest block mb-2">Original Idea Input</span>
           <span className="text-textMain text-sm italic border-l-2 border-primary/50 pl-3 block">{metadata.startup_idea}</span>

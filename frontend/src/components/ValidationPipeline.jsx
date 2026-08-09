@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle2, CircleDashed, Loader2, XCircle, Terminal } from 'lucide-react';
+import { CheckCircle2, CircleDashed, Loader2, XCircle, Terminal, WifiOff } from 'lucide-react';
 
 const STAGES = [
   { id: 'Query Strategist', label: 'Research Strategy', type: 'single', agents: ['Query Strategist'] },
@@ -18,38 +18,34 @@ const STAGES = [
 
 const ValidationPipeline = ({ requestId }) => {
   const [agentStatuses, setAgentStatuses] = useState({});
-  const [feed, setFeed] = useState([]);
   const [pipelineStatus, setPipelineStatus] = useState('running'); // running, completed, failed
-  
-  const feedEndRef = useRef(null);
+  const [connectionStatus, setConnectionStatus] = useState('connecting'); // connecting, connected, reconnecting, closed
 
   useEffect(() => {
     if (!requestId) return;
 
     const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-    const eventSource = new EventSource(`${API_BASE_URL}/progress/${requestId}`);
+    const eventSource = new EventSource(`${API_BASE_URL}/api/progress/${requestId}`);
+
+    eventSource.onopen = () => {
+      setConnectionStatus('connected');
+    };
 
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        const { agent, status, message } = data;
+        const { agent, status, message, id } = data;
+        const eventId = id || event.lastEventId || `${Date.now()}-${Math.random()}`;
 
         setAgentStatuses(prev => ({
           ...prev,
           [agent]: status
         }));
 
-        setFeed(prev => {
-          const newFeed = [...prev, { id: Date.now() + Math.random(), agent, status, message }];
-          if (newFeed.length > 100) {
-            return newFeed.slice(newFeed.length - 100);
-          }
-          return newFeed;
-        });
-
         if (agent === 'Orchestrator' && (status === 'completed' || status === 'failed')) {
           setPipelineStatus(status);
           eventSource.close();
+          setConnectionStatus('closed');
         }
       } catch (err) {
         console.error('Error parsing SSE data', err);
@@ -58,8 +54,11 @@ const ValidationPipeline = ({ requestId }) => {
 
     eventSource.onerror = (err) => {
       console.error('EventSource failed:', err);
-      // We don't automatically close on error because it might reconnect,
-      // but we can set a fallback status if we wanted to.
+      if (eventSource.readyState === EventSource.CLOSED) {
+        setConnectionStatus('closed');
+      } else {
+        setConnectionStatus('reconnecting');
+      }
     };
 
     return () => {
@@ -67,13 +66,9 @@ const ValidationPipeline = ({ requestId }) => {
     };
   }, [requestId]);
 
-  useEffect(() => {
-    if (feedEndRef.current) {
-      feedEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [feed]);
 
-  const getStageStatus = (stage) => {
+
+  const getStageStatus = useCallback((stage) => {
     if (stage.type === 'single') {
       const status = agentStatuses[stage.agents[0]];
       return status || 'waiting'; // waiting, running, completed, failed
@@ -85,23 +80,42 @@ const ValidationPipeline = ({ requestId }) => {
       if (statuses.some(s => s === 'running' || s === 'completed')) return 'running';
       return 'waiting';
     }
-  };
+  }, [agentStatuses]);
 
-  const getCompletedCount = () => {
-    return STAGES.filter(s => getStageStatus(s) === 'completed').length;
-  };
+  const progressPercentage = useMemo(() => {
+    let completedWeight = 0;
+    
+    STAGES.forEach(stage => {
+      if (stage.type === 'single') {
+        const status = agentStatuses[stage.agents[0]];
+        if (status === 'completed') completedWeight += 1;
+      } else {
+        let parallelCompleted = 0;
+        stage.agents.forEach(a => {
+          if (agentStatuses[a] === 'completed') parallelCompleted += 1;
+        });
+        completedWeight += (parallelCompleted / stage.agents.length);
+      }
+    });
 
-  const progressPercentage = (getCompletedCount() / STAGES.length) * 100;
+    return (completedWeight / STAGES.length) * 100;
+  }, [agentStatuses]);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[70vh] px-4 w-full max-w-5xl mx-auto space-y-8 py-12">
       
       {/* Header & Progress Bar */}
       <div className="w-full text-center space-y-4">
-        <h2 className="text-3xl font-bold text-white tracking-tight">
+        <h2 className="text-3xl font-bold text-textMain tracking-tight">
           {pipelineStatus === 'completed' ? 'Validation Complete' : pipelineStatus === 'failed' ? 'Validation Failed' : 'VentureLens AI is analyzing your startup'}
         </h2>
-        <div className="w-full h-2 bg-surface/50 rounded-full overflow-hidden border border-border">
+        <div 
+          className="w-full h-2 bg-surface/50 rounded-full overflow-hidden border border-border"
+          role="progressbar"
+          aria-valuenow={Math.round(progressPercentage)}
+          aria-valuemin="0"
+          aria-valuemax="100"
+        >
           <motion.div 
             className={`h-full ${pipelineStatus === 'failed' ? 'bg-red-500' : 'bg-primary'}`}
             initial={{ width: 0 }}
@@ -111,10 +125,10 @@ const ValidationPipeline = ({ requestId }) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 w-full">
+      <div className="w-full max-w-2xl mx-auto">
         {/* Pipeline Orchestration UI */}
         <div className="glass-panel p-6 rounded-2xl flex flex-col space-y-4">
-          <h3 className="text-xl font-semibold text-white mb-2 flex items-center gap-2">
+          <h3 className="text-xl font-semibold text-textMain mb-2 flex items-center gap-2">
             <Terminal className="w-5 h-5 text-primary" />
             Orchestration Flow
           </h3>
@@ -157,7 +171,7 @@ const ValidationPipeline = ({ requestId }) => {
                   
                   <div className="flex-grow">
                     <span className={`font-medium block ${
-                      isCompleted ? 'text-white' : 
+                      isCompleted ? 'text-textMain' : 
                       isFailed ? 'text-red-400' :
                       isRunning ? 'text-primary' : 'text-textMuted'
                     }`}>
@@ -195,57 +209,6 @@ const ValidationPipeline = ({ requestId }) => {
                 </motion.div>
               );
             })}
-          </div>
-        </div>
-
-        {/* Live AI Activity Feed */}
-        <div className="glass-panel p-6 rounded-2xl flex flex-col h-[500px] lg:h-auto overflow-hidden">
-          <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-            <span className="relative flex h-3 w-3">
-              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${pipelineStatus === 'running' ? 'bg-primary' : 'bg-border'}`}></span>
-              <span className={`relative inline-flex rounded-full h-3 w-3 ${pipelineStatus === 'running' ? 'bg-primary' : 'bg-border'}`}></span>
-            </span>
-            Live AI Activity
-          </h3>
-          
-          <div className="flex-grow overflow-y-auto space-y-3 pr-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
-            <AnimatePresence initial={false}>
-              {feed.length === 0 && (
-                <motion.div 
-                  initial={{ opacity: 0 }} 
-                  animate={{ opacity: 1 }} 
-                  className="text-textMuted text-sm text-center mt-10"
-                >
-                  Waiting for backend connection...
-                </motion.div>
-              )}
-              {feed.map((event) => (
-                <motion.div
-                  key={event.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className={`text-sm p-3 rounded-lg border bg-surface/50 font-mono ${
-                    event.status === 'failed' ? 'border-red-500/30 text-red-400' :
-                    event.status === 'completed' ? 'border-success/20 text-textMuted' :
-                    'border-border text-text'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`text-xs font-bold ${
-                      event.status === 'failed' ? 'text-red-500' :
-                      event.status === 'completed' ? 'text-success' :
-                      'text-primary'
-                    }`}>
-                      [{event.agent}]
-                    </span>
-                  </div>
-                  <div className="pl-2 border-l-2 border-border/50">
-                    {event.message}
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-            <div ref={feedEndRef} />
           </div>
         </div>
       </div>

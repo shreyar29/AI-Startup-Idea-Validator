@@ -10,7 +10,8 @@ import {
   Crosshair,
   UserCheck,
   Zap,
-  Activity
+  Activity,
+  DollarSign
 } from 'lucide-react';
 
 const CustomerSection = ({ data }) => {
@@ -27,12 +28,20 @@ const CustomerSection = ({ data }) => {
   const goals = primaryPersona.goals || [];
 
   // 1. Generate Executive Summary dynamically
-  const topSegment = segments[0] || 'target demographics';
+  const safeString = (val) => {
+    if (typeof val === 'string') return val;
+    if (typeof val === 'object' && val !== null) {
+      return Object.values(val)[0] || String(val);
+    }
+    return String(val || '');
+  };
+
+  const topSegment = segments[0] ? safeString(segments[0]) : 'target demographics';
   const topPainRaw = painPoints[0];
-  const topPain = topPainRaw ? topPainRaw.toLowerCase() : 'unidentified challenges';
+  const topPain = topPainRaw ? safeString(topPainRaw).toLowerCase() : 'unidentified challenges';
   const firstFeat = featureDemand[0];
-  const topFeatureRaw = typeof firstFeat === 'object' && firstFeat !== null ? firstFeat.feature : firstFeat;
-  const topFeature = topFeatureRaw ? topFeatureRaw.toLowerCase() : 'tailored solutions';
+  const topFeatureRaw = typeof firstFeat === 'object' && firstFeat !== null ? firstFeat.feature || firstFeat.name : firstFeat;
+  const topFeature = topFeatureRaw ? safeString(topFeatureRaw).toLowerCase() : 'tailored solutions';
   
   const execSummary = `Our intelligence indicates the primary market consists of ${topSegment.toLowerCase()}. Their most critical friction point is ${topPain}, driving demand for ${topFeature}.`;
 
@@ -55,7 +64,7 @@ const CustomerSection = ({ data }) => {
         <div className="bg-primary/10 p-2 rounded-xl">
           <Users className="w-6 h-6 text-primary" />
         </div>
-        <h2 className="text-2xl font-bold text-white tracking-tight">Customer Intelligence</h2>
+        <h2 className="text-2xl font-bold text-textMain tracking-tight">Customer Intelligence</h2>
       </div>
 
       {/* 1: Executive Customer Insight Hero */}
@@ -83,7 +92,7 @@ const CustomerSection = ({ data }) => {
             <Users className="w-10 h-10 text-primary" />
           </div>
           <div className="space-y-4">
-            <h4 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight">
+            <h4 className="text-3xl md:text-4xl font-extrabold text-textMain tracking-tight">
               {primaryPersona.name || 'Ideal Customer Profile'}
             </h4>
             <div className="flex flex-wrap gap-3">
@@ -95,6 +104,26 @@ const CustomerSection = ({ data }) => {
               {primaryPersona.demographics && primaryPersona.demographics !== 'Unknown' && (
                 <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-textMain bg-surface/80 px-3 py-1.5 rounded-lg border border-border/50">
                   <Activity className="w-3.5 h-3.5 text-success" /> {primaryPersona.demographics}
+                </span>
+              )}
+              {primaryPersona.location && primaryPersona.location !== 'Unknown' && (
+                <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-textMain bg-surface/80 px-3 py-1.5 rounded-lg border border-border/50">
+                  <Target className="w-3.5 h-3.5 text-warning" /> {primaryPersona.location}
+                </span>
+              )}
+              {primaryPersona.income && primaryPersona.income !== 'Unknown' && (
+                <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-textMain bg-surface/80 px-3 py-1.5 rounded-lg border border-border/50">
+                  <CreditCard className="w-3.5 h-3.5 text-success" /> {primaryPersona.income}
+                </span>
+              )}
+              {primaryPersona.budget && primaryPersona.budget !== 'Unknown' && (
+                <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-textMain bg-surface/80 px-3 py-1.5 rounded-lg border border-border/50">
+                  <DollarSign className="w-3.5 h-3.5 text-error" /> {primaryPersona.budget}
+                </span>
+              )}
+              {primaryPersona.decision_drivers && primaryPersona.decision_drivers.length > 0 && (
+                <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-textMain bg-surface/80 px-3 py-1.5 rounded-lg border border-border/50">
+                  <Lightbulb className="w-3.5 h-3.5 text-primary" /> {primaryPersona.decision_drivers.join(', ')}
                 </span>
               )}
             </div>
@@ -113,7 +142,7 @@ const CustomerSection = ({ data }) => {
               <div key={i} className="text-sm font-medium text-textMain leading-relaxed p-4 bg-error/5 rounded-xl border border-error/10">
                 {pt}
               </div>
-            )) : <div className="text-sm text-textDim italic">No major pain points identified.</div>}
+            )) : <div className="text-sm text-textDim italic">Insufficient verified evidence.</div>}
           </div>
         </div>
 
@@ -126,7 +155,7 @@ const CustomerSection = ({ data }) => {
               <div key={i} className="text-sm font-medium text-textMain leading-relaxed p-4 bg-primary/5 rounded-xl border border-primary/10">
                 {goal}
               </div>
-            )) : <div className="text-sm text-textDim italic">No explicit goals identified.</div>}
+            )) : <div className="text-sm text-textDim italic">Insufficient verified evidence.</div>}
           </div>
         </div>
 
@@ -139,7 +168,7 @@ const CustomerSection = ({ data }) => {
               <div key={i} className="text-sm font-medium text-textMain leading-relaxed p-4 bg-success/5 rounded-xl border border-success/10">
                 {need}
               </div>
-            )) : <div className="text-sm text-textDim italic">No unmet needs identified.</div>}
+            )) : <div className="text-sm text-textDim italic">Insufficient verified evidence.</div>}
           </div>
         </div>
       </div>
@@ -157,7 +186,7 @@ const CustomerSection = ({ data }) => {
               <div key={i} className="glass-panel p-5 rounded-xl border-l-4 border-l-warning/70 hover:-translate-y-0.5 transition-transform shadow-sm bg-gradient-to-r from-surface to-background">
                 <p className="text-sm text-textMain font-medium leading-relaxed">{bb}</p>
               </div>
-            )) : <div className="text-sm text-textDim italic px-2">No distinctive buying behaviours identified.</div>}
+            )) : <div className="text-sm text-textDim italic px-2">Insufficient verified evidence.</div>}
           </div>
         </div>
 
@@ -179,7 +208,7 @@ const CustomerSection = ({ data }) => {
               return (
                 <div key={i} className="glass-panel p-5 rounded-xl flex flex-col gap-3 hover:-translate-y-0.5 transition-transform shadow-sm">
                   <div className="flex items-start justify-between gap-4">
-                    <span className="text-sm font-bold text-white leading-tight">{name}</span>
+                    <span className="text-sm font-bold text-textMain leading-tight">{name}</span>
                     <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border flex-shrink-0 ${badgeColor}`}>
                       {priority}
                     </span>
@@ -187,7 +216,7 @@ const CustomerSection = ({ data }) => {
                   {reason && <p className="text-xs text-textMuted leading-relaxed">{reason}</p>}
                 </div>
               );
-            }) : <div className="text-sm text-textDim italic px-2">No feature demands identified.</div>}
+            }) : <div className="text-sm text-textDim italic px-2">Insufficient verified evidence.</div>}
           </div>
         </div>
       </div>

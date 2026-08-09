@@ -8,8 +8,8 @@ const Footer = () => {
           &copy; {new Date().getFullYear()} VentureLens. All rights reserved.
         </div>
         <div className="flex space-x-6 text-sm font-medium text-textMuted">
-          <a href="#" className="hover:text-white transition-colors">Privacy</a>
-          <a href="#" className="hover:text-white transition-colors">Terms</a>
+          <span className="cursor-not-allowed hover:text-textMain transition-colors">Privacy</span>
+          <span className="cursor-not-allowed hover:text-textMain transition-colors">Terms</span>
         </div>
       </div>
     </footer>
