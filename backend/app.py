@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 import asyncio
 import os
@@ -168,9 +169,7 @@ app.include_router(history_router, prefix="/api", tags=["history"])
 
 
 
-@app.get("/")
-def home():
-    return {"message": "AI Startup Idea Validator API", "status": "running", "version": API_VERSION}
+# Root handler removed, handled by SPA fallback
 
 @app.get("/health", tags=["system"])
 def health_check():
@@ -228,4 +227,28 @@ async def stream_logs(request: Request):
         finally:
             await asyncio.to_thread(f.close)
 
-    return StreamingResponse(log_generator(), media_type="text/event-stream")
+    return StreamingResponse(log_generator(), media_type="text/event-stream")
+
+# --- Static File Serving for SPA (React/Vite) ---
+frontend_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "dist"))
+if os.path.isdir(frontend_dist):
+    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_frontend(full_path: str):
+        if full_path.startswith("api/"):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="API route not found")
+        
+        file_path = os.path.join(frontend_dist, full_path)
+        if full_path and os.path.isfile(file_path):
+            return FileResponse(file_path)
+        
+        index_file = os.path.join(frontend_dist, "index.html")
+        if os.path.isfile(index_file):
+            return FileResponse(index_file)
+        
+        return JSONResponse(status_code=404, content={"message": "Frontend build not found."})
+else:
+    logger.warning("Frontend dist directory not found. API only mode.")
+

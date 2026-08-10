@@ -54,7 +54,7 @@ const Dashboard = () => {
         const userId = localStorage.getItem('user_id');
         if (userId) {
           try {
-            await fetch('http://localhost:8000/api/history', {
+            await fetch(`${import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:8000')}/api/history`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
