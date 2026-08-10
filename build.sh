@@ -3,7 +3,6 @@
 set -o errexit
 
 echo "Installing backend dependencies..."
-cd backend
 pip install -r requirements.txt
 
 echo "Building frontend..."
