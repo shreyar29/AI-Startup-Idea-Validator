@@ -4,7 +4,7 @@ from pydantic import Field
 
 class AppSettings(BaseSettings):
     ALLOWED_ORIGINS: str = Field(default="http://localhost:3000,http://localhost:5173")
-    SECRET_KEY: str = Field(default="supersecretkey")
+    SECRET_KEY: str = Field(...)
     LOG_LEVEL: str = Field(default="INFO")
 
     @property

@@ -197,7 +197,12 @@ async def readiness_check(response: Response):
 
 @app.get("/api/logs/stream")
 async def stream_logs(request: Request):
-    # TODO: Production deployments must protect this endpoint using authentication.
+    # Production deployments must protect this endpoint or disable it
+    is_development = os.environ.get("ENVIRONMENT", "").lower() == "development"
+    if not is_development:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Log streaming is disabled in production")
+        
     async def log_generator():
         log_file = "validation.log"
         
