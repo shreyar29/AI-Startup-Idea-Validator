@@ -1,4 +1,13 @@
 from fastapi import FastAPI, Request, Response
+
+try:
+    from slowapi import _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+    from core.rate_limiter import limiter
+    HAS_SLOWAPI = True
+except ImportError:
+    HAS_SLOWAPI = False
+
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -13,10 +22,22 @@ from contextlib import asynccontextmanager
 from core.config import settings
 from core.container import container
 
+# Core Mesh Routers (Always available)
 from routes.search import router as search_router
-from routes.auth import router as auth_router
-from routes.history import router as history_router
 from routes.progress import router as progress_router
+
+# Enterprise Architecture Routers (Optional)
+try:
+    from api.auth_routes import router as auth_router
+    from api.chat_routes import router as chat_router
+    from api.report_routes import router as report_router
+    from api.export_routes import router as export_router
+    from api.dashboard_routes import router as dashboard_router
+    from api.workspace_routes import router as workspace_router
+    from api.metrics_routes import router as metrics_router
+    HAS_ENTERPRISE_API = True
+except ImportError as e:
+    HAS_ENTERPRISE_API = False
 from utils.logger import get_logger
 from db import init_db
 
@@ -87,6 +108,12 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Properly register SlowAPI limiter if available
+if HAS_SLOWAPI:
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
 # Configurable CORS instead of wildcard
 ALLOWED_ORIGINS = settings.app.allowed_origins_list
 is_development = os.environ.get("ENVIRONMENT", "").lower() == "development"
@@ -116,7 +143,13 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
         logger.info(f"Request started: {request.method} {request.url.path} (ID: {request_id})")
         
         try:
-            response = await call_next(request)
+            # Bypass timeout for streaming endpoints
+            if request.url.path.startswith(("/api/logs/stream", "/api/progress")):
+                response = await call_next(request)
+            else:
+                timeout_seconds = getattr(settings.app, 'REQUEST_TIMEOUT', 120)
+                response = await asyncio.wait_for(call_next(request), timeout=timeout_seconds)
+                
             process_time = time.perf_counter() - start_time
             
             # Inject correlation IDs and metrics
@@ -142,6 +175,17 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
             
             logger.info(f"Request completed: {request.method} {request.url.path} - Status: {response.status_code} - Time: {process_time:.4f}s (ID: {request_id})")
             return response
+        except asyncio.TimeoutError:
+            process_time = time.perf_counter() - start_time
+            logger.error(f"Request timeout: {request.method} {request.url.path} - Time: {process_time:.4f}s (ID: {request_id})")
+            return JSONResponse(
+                status_code=504,
+                content={
+                    "error": "Gateway Timeout",
+                    "message": "The server took too long to process the request.",
+                    "request_id": request_id
+                }
+            )
         except Exception as e:
             process_time = time.perf_counter() - start_time
             logger.exception(f"Request failed: {request.method} {request.url.path} - Time: {process_time:.4f}s (ID: {request_id})")
@@ -164,8 +208,15 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 app.include_router(search_router, tags=["search"])
 app.include_router(progress_router, prefix="/api", tags=["progress"])
-app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
-app.include_router(history_router, prefix="/api", tags=["history"])
+
+if HAS_ENTERPRISE_API:
+    app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+    app.include_router(chat_router) # prefix is defined in the router itself
+    app.include_router(report_router)
+    app.include_router(export_router)
+    app.include_router(dashboard_router)
+    app.include_router(workspace_router)
+    app.include_router(metrics_router)
 
 
 
@@ -179,28 +230,56 @@ def health_check():
 @app.get("/ready", tags=["system"])
 async def readiness_check(response: Response):
     # Enhanced readiness check prepared for dependency validation (DB, Cache, external APIs)
-    # TODO: Add readiness check for database (db.py) when a health check method is exposed.
-    # TODO: Add readiness check for search_service (TavilySearchService) when a health check method is exposed.
     try:
         llm_provider = container.get_llm_provider()
         dependencies_healthy = await llm_provider.health_check()
+        
+        from database.database import check_db_health
+        db_healthy = await check_db_health()
+        if not db_healthy:
+            dependencies_healthy = False
+            logger.warning("Database readiness check failed. Service is unavailable.")
+                
+        # Check active session count for metrics
+        # Chat sessions are now managed via PostgreSQL memory
+        active_sessions = 0 # Consider replacing with a quick count query if needed
+        logger.debug(f"Active sessions: {active_sessions}")
+        
     except Exception as e:
         logger.warning(f"Readiness check failed: {str(e)}")
         dependencies_healthy = False
-    
+
     if dependencies_healthy:
         return {"status": "ready", "version": API_VERSION}
     
     response.status_code = 503
     return {"status": "unavailable", "version": API_VERSION}
 
+from auth.jwt_manager import JWTManager
+from fastapi import Depends, HTTPException
+
+async def verify_admin_sse(request: Request):
+    token = request.query_params.get("token")
+    if not token:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ")[1]
+            
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required for log streaming")
+        
+    payload = JWTManager.decode_token(token)
+    if not payload or payload.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin privileges required for log streaming")
+    return payload
+
 @app.get("/api/logs/stream")
-async def stream_logs(request: Request):
+async def stream_logs(request: Request, admin_user: dict = Depends(verify_admin_sse)):
     # Production deployments must protect this endpoint or disable it
     is_development = os.environ.get("ENVIRONMENT", "").lower() == "development"
     if not is_development:
-        from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Log streaming is disabled in production")
+
         
     async def log_generator():
         log_file = "validation.log"
@@ -251,4 +330,4 @@ if os.path.isdir(frontend_dist):
         return JSONResponse(status_code=404, content={"message": "Frontend build not found."})
 else:
     logger.warning("Frontend dist directory not found. API only mode.")
-
+

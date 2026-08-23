@@ -28,7 +28,7 @@ json-repair>=0.30.0
 rich>=13.7.0
 
 # Search Fallback
-ddgs>=9.14.4
+duckduckgo-search>=6.0.0
 
 # LLM Providers
 google-genai>=0.2.0
@@ -36,3 +36,13 @@ google-genai>=0.2.0
 # Auth
 bcrypt>=4.1.2
 PyJWT>=2.8.0
+
+# PDF Export
+reportlab>=4.0.0
+
+# --- Enterprise Architecture Dependencies ---
+sqlalchemy>=2.0.29
+aiosqlite>=0.20.0
+slowapi>=0.1.9
+redis>=5.0.3
+celery>=5.3.6

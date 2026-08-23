@@ -1,881 +1,322 @@
 """
 swot_agent.py
+(SWOT Analysis Agent)
 
-Milestone 3 - SWOT Analysis Agent
-
-Responsibilities
-----------------
-- Reads Market, Customer and Competitor analysis from Shared Context.
-- Does NOT perform independent web searches.
-- Derives Strengths, Weaknesses, Opportunities and Threats.
-- Writes ONLY to shared_context["swot_analysis"].
-- Provides a structured JSON-compatible output.
-- Can optionally use an injected LLM client for deeper reasoning.
+Purpose:
+Milestone 3 — Production-grade SWOT Agent.
+Evaluates Strengths, Weaknesses, Opportunities, and Threats using evidence 
+from Market, Customer, Competitor, and Risk intelligence agents.
 """
 
-from __future__ import annotations
-
+import asyncio
+import json
+import logging
+import time
+import random
 from datetime import datetime, timezone
 from typing import Any
-import logging
-import json
+
+from core.config import settings
+from utils.error_handler import safe_parse_llm_json, MalformedLLMOutputError
 
 logger = logging.getLogger("swot_agent")
 
-
 class SWOTAnalysisError(Exception):
-    """Raised when SWOT analysis cannot be completed."""
-
+    """Raised when SWOT analysis fails."""
 
 class SWOTAgent:
     """
-    Milestone 3 SWOT Analysis Agent.
-
-    Reads:
-        market_analysis
-        customer_analysis
-        competitor_analysis
-
-    Writes:
-        swot_analysis
+    Analyzes startup SWOT using existing agent outputs.
+    Operates as a decentralized node in the A2A Mesh Network.
     """
 
-    def __init__(
-        self,
-        shared_context: dict[str, Any],
-        llm_client=None,
-    ):
+    def __init__(self, shared_context: dict, llm_client=None):
         self.context = shared_context
         self.llm_client = llm_client
+        self.peers = {}
+        self._analysis_task = None
+        self.status = "idle"
 
-    async def analyze(self) -> dict[str, Any]:
+    def connect_peers(self, peers: dict):
+        """Connect this agent to other agents in the mesh."""
+        self.peers = peers
+
+    async def get_analysis(self):
         """
-        Main SWOT Agent entry point.
+        Mesh endpoint.
+        Runs the analysis once and caches the asyncio task.
         """
+        if self._analysis_task is not None:
+            if self._analysis_task.done():
+                try:
+                    self._analysis_task.result()
+                    if self.status in ["failed", "timeout"]:
+                        self._analysis_task = None
+                except Exception:
+                    self._analysis_task = None
 
-        logger.info("SWOT Agent started.")
+        if self._analysis_task is None:
+            self._analysis_task = asyncio.create_task(self._perform_analysis())
 
-        market = self.context.get("market_analysis", {})
-        customer = self.context.get("customer_analysis", {})
-        competitor = self.context.get("competitor_analysis", {})
-        idea = self.context.get("idea", {})
+        try:
+            return await self._analysis_task
+        except asyncio.CancelledError:
+            logger.warning("SWOTAgent: Task cancelled.")
+            self._analysis_task = None
+            self.status = "failed"
+            raise
 
-        if not (market or customer or competitor):
-            logger.error("No upstream analysis found.")
-            raise SWOTAnalysisError(
-                "No Market, Customer or Competitor analysis found "
-                "in Shared Context."
-            )
+    async def _perform_analysis(self):
+        """Run the SWOT analysis."""
+        self.status = "started"
+        start_time = time.time()
+        correlation_id = self.context.get("correlation_id", "N/A")
+        log_prefix = f"[{correlation_id}] SWOTAgent:"
 
-        logger.info(
-            "Loaded upstream analysis: Market=%s Customer=%s Competitor=%s",
-            bool(market),
-            bool(customer),
-            bool(competitor),
-        )
+        try:
+            logger.info(f"{log_prefix} Starting SWOT analysis.")
 
-        # ---------------------------------------------------------
-        # LLM PATH
-        # ---------------------------------------------------------
-        if self.llm_client is not None:
+            # Await required peers to prevent race condition
+            if self.peers:
+                dependencies = []
+                for peer_name in ["market", "customer", "competitor", "risk"]:
+                    if peer_name in self.peers:
+                        dependencies.append(self.peers[peer_name].get_analysis())
+                
+                if dependencies:
+                    await asyncio.gather(*dependencies, return_exceptions=True)
+
+            result = await self.analyze(log_prefix)
+            self.status = "success"
+            duration = time.time() - start_time
+            logger.info(f"{log_prefix} Completed successfully in {duration:.2f}s.")
+
+            return result
+
+        except asyncio.TimeoutError as exc:
+            self.status = "timeout"
+            logger.error(f"{log_prefix} SWOT analysis timed out: {exc}")
+            return self._return_degraded("SWOT analysis timed out.")
+        except Exception as exc:
+            self.status = "failed"
+            logger.exception(f"{log_prefix} SWOT analysis failed: {exc}")
+            return self._return_degraded(f"Unexpected failure: {str(exc)}")
+
+    def _return_degraded(self, reason: str):
+        """Return a safe response when analysis fails."""
+        analysis = {
+            "executive_summary": "Analysis could not be completed.",
+            "strategic_recommendation": "Address system failures before proceeding.",
+            "strengths": [],
+            "weaknesses": [],
+            "opportunities": [],
+            "threats": [],
+            "confidence": "Low",
+            "failure_reason": reason,
+            "status": "degraded" if "Insufficient" in reason else self.status,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self.context["swot_analysis"] = analysis
+        return analysis
+
+    def _get_previous_analysis(self, key: str) -> Any:
+        """Safely retrieve another agent's analysis."""
+        value = self.context.get(key)
+        if isinstance(value, dict):
+            return value
+        return {}
+
+    def _build_evidence_context(self) -> str:
+        """Build a highly optimized context payload from upstream agents."""
+        market = self._get_previous_analysis("market_analysis")
+        customer = self._get_previous_analysis("customer_analysis")
+        competitor = self._get_previous_analysis("competitor_analysis")
+        risk = self._get_previous_analysis("risk_analysis")
+
+        idea_data = self.context.get("idea") or {}
+        idea = idea_data.get("description") or "Unknown startup idea"
+
+        # Explicitly map upstream insights to their SWOT domain to guide the LLM
+        evidence = {
+            "startup_idea": idea,
+            "market_growth": market.get("growth_rate"),
+            "market_opportunities": market.get("opportunities"),
+            "customer_pain_points": [p.get("insight") for p in customer.get("pain_points", []) if isinstance(p, dict)],
+            "unmet_needs": [n.get("insight") for n in customer.get("unmet_needs", []) if isinstance(n, dict)],
+            "competitor_weaknesses": competitor.get("gap_analysis"),
+            "competitor_threats": [c.get("name") for c in competitor.get("competitors", []) if c.get("threat_score", 0) > 70],
+            "critical_risks": [r.get("risk") for r in risk.get("risks", []) if r.get("severity") in ["High", "Critical"]]
+        }
+        return json.dumps(evidence, indent=2, default=str)
+
+    def _validate_swot_item(self, item: Any) -> dict | None:
+        """Validates and enforces structure for a single SWOT item."""
+        if not isinstance(item, dict):
+            return None
+            
+        insight = str(item.get("insight") or "").strip()
+        if not insight:
+            return None
+            
+        impact = str(item.get("impact") or "Medium").strip().title()
+        if impact not in ["Low", "Medium", "High", "Critical"]:
+            impact = "Medium"
+            
+        raw_evidence = item.get("evidence", [])
+        if isinstance(raw_evidence, str):
+            evidence = [raw_evidence]
+        elif isinstance(raw_evidence, list):
+            evidence = [str(e).strip() for e in raw_evidence if e]
+        else:
+            evidence = []
+            
+        return {
+            "insight": insight,
+            "impact": impact,
+            "evidence": evidence
+        }
+
+    async def analyze(self, log_prefix: str = "SWOTAgent:"):
+        """Main SWOT Agent entry point."""
+        logger.info(f"{log_prefix} Execution started.")
+
+        if self.llm_client is None:
+            return self._return_degraded("LLM client is not available.")
+            
+        successful_analyses = sum(1 for key in ["market_analysis", "customer_analysis", "competitor_analysis", "risk_analysis"] 
+                                if self.context.get(key) and self.context.get(key, {}).get("status") != "failed")
+                
+        if successful_analyses < 2:
+            logger.warning(f"{log_prefix} Insufficient data for SWOT analysis. Found {successful_analyses}/4 upstream outputs.")
+            return self._return_degraded("Insufficient data for SWOT analysis")
+
+        evidence_context = self._build_evidence_context()
+
+        prompt = f"""
+Analyze the Strengths, Weaknesses, Opportunities, and Threats (SWOT) of the startup using ONLY the provided evidence.
+
+1. Generate Opportunities explicitly from: market growth, customer pain points, and competitor gaps.
+2. Generate Threats explicitly from: critical risks, competitor threats, and market maturity.
+3. For EVERY item across the four quadrants, provide the exact 'insight', determine its 'impact' (Low, Medium, High, Critical), and cite specific 'evidence' strings from the payload.
+4. Generate a concise 'executive_summary' synthesizing the overall market position.
+5. Generate a 'strategic_recommendation' advising the founders on their immediate next steps.
+
+Do not invent facts that are not supported by the evidence.
+
+Return ONLY valid JSON with exactly this structure:
+{{
+    "executive_summary": "string",
+    "strategic_recommendation": "string",
+    "strengths": [
+        {{"insight": "string", "impact": "High", "evidence": ["string"]}}
+    ],
+    "weaknesses": [
+        {{"insight": "string", "impact": "Medium", "evidence": ["string"]}}
+    ],
+    "opportunities": [
+        {{"insight": "string", "impact": "High", "evidence": ["string"]}}
+    ],
+    "threats": [
+        {{"insight": "string", "impact": "Critical", "evidence": ["string"]}}
+    ]
+}}
+
+Evidence:
+{evidence_context}
+"""
+
+        max_retries = getattr(settings.agent, "SWOT_MAX_RETRIES", 3)
+        timeout_seconds = getattr(settings.agent, "SWOT_LLM_TIMEOUT", 60)
+        parsed_analysis = None
+        last_error = None
+
+        for attempt in range(max_retries):
             try:
-                analysis = await self._generate_with_llm(
-                    idea,
-                    market,
-                    customer,
-                    competitor,
+                logger.info(f"{log_prefix} Calling LLM attempt {attempt + 1}/{max_retries}.")
+                raw_response = await asyncio.wait_for(
+                    self.llm_client.generate_response(
+                        system_prompt="You are an expert startup business strategist. Return ONLY valid JSON.",
+                        user_prompt=(prompt if attempt == 0 else f"{prompt}\n\nFix JSON formatting. Error: {last_error}"),
+                        response_format={"type": "json_object"}
+                    ),
+                    timeout=timeout_seconds
                 )
-
-                analysis = self._validate_and_normalize(analysis)
-
-                self.context["swot_analysis"] = analysis
-
-                logger.info("SWOT Agent completed using LLM.")
-                return analysis
-
+                parsed_analysis = safe_parse_llm_json(raw_response)
+                break
+            except asyncio.TimeoutError:
+                last_error = "LLM Timeout"
+                logger.warning(f"{log_prefix} LLM timeout.")
+                await asyncio.sleep((2 ** attempt) + random.uniform(0, 1))
+            except MalformedLLMOutputError as exc:
+                last_error = str(exc)
+                logger.warning(f"{log_prefix} Invalid JSON: {exc}")
+                await asyncio.sleep((2 ** attempt) + random.uniform(0, 1))
             except Exception as exc:
-                logger.warning(
-                    "LLM SWOT generation failed: %s. "
-                    "Falling back to deterministic analysis.",
-                    exc,
-                )
+                last_error = str(exc)
+                logger.exception(f"{log_prefix} LLM request failed.")
+                await asyncio.sleep((2 ** attempt) + random.uniform(0, 1))
 
-        # ---------------------------------------------------------
-        # DETERMINISTIC FALLBACK
-        # ---------------------------------------------------------
-        analysis = self._generate_deterministic_swot(
-            idea,
-            market,
-            customer,
-            competitor,
-        )
+        if not isinstance(parsed_analysis, dict):
+            return self._return_degraded(f"LLM extraction failed: {last_error}")
+
+        # Validate and structure quadrants
+        quadrants = ["strengths", "weaknesses", "opportunities", "threats"]
+        validated_swot = {}
+        total_evidence_count = 0
+        total_items = 0
+        
+        impact_weights = {"Low": 1, "Medium": 2, "High": 3, "Critical": 4}
+
+        for quad in quadrants:
+            items = []
+            raw_items = parsed_analysis.get(quad, [])
+            if isinstance(raw_items, list):
+                for raw_item in raw_items:
+                    validated = self._validate_swot_item(raw_item)
+                    if validated:
+                        items.append(validated)
+                        total_items += 1
+                        total_evidence_count += len(validated["evidence"])
+            
+            # Sort items by impact severity
+            items.sort(key=lambda x: impact_weights.get(x["impact"], 0), reverse=True)
+            validated_swot[quad] = items
+
+        # Evidence-Quality Confidence Scoring
+        if total_items > 0:
+            evidence_ratio = total_evidence_count / total_items
+            if evidence_ratio >= 1.5:
+                confidence = "High"
+            elif evidence_ratio >= 0.8:
+                confidence = "Medium"
+            else:
+                confidence = "Low"
+        else:
+            confidence = "Low"
+
+        executive_summary = str(parsed_analysis.get("executive_summary") or "Strategic overview unavailable.").strip()
+        strategic_recommendation = str(parsed_analysis.get("strategic_recommendation") or "Review individual SWOT quadrants for next steps.").strip()
+
+        analysis = {
+            "executive_summary": executive_summary,
+            "strategic_recommendation": strategic_recommendation,
+            "strengths": validated_swot["strengths"],
+            "weaknesses": validated_swot["weaknesses"],
+            "opportunities": validated_swot["opportunities"],
+            "threats": validated_swot["threats"],
+            "confidence": confidence,
+            "failure_reason": None,
+            "status": "success",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
 
         self.context["swot_analysis"] = analysis
 
-        logger.info("SWOT Agent completed using fallback analysis.")
+        logger.info(
+            f"{log_prefix} SWOT Analysis Complete. "
+            f"S:{len(validated_swot['strengths'])} W:{len(validated_swot['weaknesses'])} "
+            f"O:{len(validated_swot['opportunities'])} T:{len(validated_swot['threats'])} "
+            f"| Confidence: {confidence}"
+        )
 
         return analysis
-
-    # =============================================================
-    # LLM ANALYSIS
-    # =============================================================
-
-    async def _generate_with_llm(
-        self,
-        idea: dict[str, Any],
-        market: dict[str, Any],
-        customer: dict[str, Any],
-        competitor: dict[str, Any],
-    ) -> dict[str, Any]:
-        """
-        Supports common async LLM client interfaces.
-
-        The project can inject its existing LLM client without
-        requiring the SWOT agent to perform its own research.
-        """
-
-        prompt = self._build_prompt(
-            idea,
-            market,
-            customer,
-            competitor,
-        )
-
-        # Common project-specific wrapper style.
-        if hasattr(self.llm_client, "generate"):
-            response = self.llm_client.generate(prompt)
-
-            if hasattr(response, "__await__"):
-                response = await response
-
-            return self._parse_llm_response(response)
-
-        # OpenAI-compatible async client style.
-        if hasattr(self.llm_client, "chat"):
-            chat = self.llm_client.chat
-
-            if hasattr(chat, "completions"):
-                response = await chat.completions.create(
-                    model=getattr(
-                        self.llm_client,
-                        "model",
-                        "gpt-4o-mini",
-                    ),
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": (
-                                "You are a startup strategy analyst. "
-                                "Return ONLY valid JSON."
-                            ),
-                        },
-                        {
-                            "role": "user",
-                            "content": prompt,
-                        },
-                    ],
-                    temperature=0.2,
-                )
-
-                content = response.choices[0].message.content
-
-                return self._parse_llm_response(content)
-
-        raise SWOTAnalysisError(
-            "Unsupported LLM client interface."
-        )
-
-    def _build_prompt(
-        self,
-        idea: dict[str, Any],
-        market: dict[str, Any],
-        customer: dict[str, Any],
-        competitor: dict[str, Any],
-    ) -> str:
-        """
-        Creates the structured SWOT reasoning prompt.
-        """
-
-        return f"""
-Analyze the startup idea using ONLY the supplied evidence.
-
-STARTUP IDEA:
-{json.dumps(idea, default=str, indent=2)}
-
-MARKET ANALYSIS:
-{json.dumps(market, default=str, indent=2)}
-
-CUSTOMER ANALYSIS:
-{json.dumps(customer, default=str, indent=2)}
-
-COMPETITOR ANALYSIS:
-{json.dumps(competitor, default=str, indent=2)}
-
-Generate a strategic SWOT analysis.
-
-Requirements:
-
-1. Strengths:
-   Internal advantages of the startup.
-
-2. Weaknesses:
-   Internal limitations, gaps or disadvantages.
-
-3. Opportunities:
-   External market opportunities that the startup can exploit.
-
-4. Threats:
-   External factors that could negatively affect the startup.
-
-For every item provide:
-- point
-- evidence
-- reasoning
-- confidence
-
-Return ONLY JSON in exactly this structure:
-
-{{
-  "strengths": [
-    {{
-      "point": "...",
-      "evidence": "...",
-      "reasoning": "...",
-      "confidence": 0.0
-    }}
-  ],
-  "weaknesses": [
-    {{
-      "point": "...",
-      "evidence": "...",
-      "reasoning": "...",
-      "confidence": 0.0
-    }}
-  ],
-  "opportunities": [
-    {{
-      "point": "...",
-      "evidence": "...",
-      "reasoning": "...",
-      "confidence": 0.0
-    }}
-  ],
-  "threats": [
-    {{
-      "point": "...",
-      "evidence": "...",
-      "reasoning": "...",
-      "confidence": 0.0
-    }}
-  ],
-  "strategic_summary": "...",
-  "priority_action": "..."
-}}
-"""
-
-    # =============================================================
-    # RESPONSE PARSING
-    # =============================================================
-
-    def _parse_llm_response(self, response: Any) -> dict[str, Any]:
-        """
-        Converts common LLM response formats into a dictionary.
-        """
-
-        if isinstance(response, dict):
-            return response
-
-        if hasattr(response, "text"):
-            response = response.text
-
-        if not isinstance(response, str):
-            raise SWOTAnalysisError(
-                "LLM returned an unsupported response format."
-            )
-
-        text = response.strip()
-
-        # Remove markdown JSON fences if present.
-        if text.startswith("```"):
-            text = text.replace("```json", "", 1)
-            text = text.replace("```", "")
-            text = text.strip()
-
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError as exc:
-            raise SWOTAnalysisError(
-                "LLM returned invalid JSON."
-            ) from exc
-
-    # =============================================================
-    # VALIDATION
-    # =============================================================
-
-    def _validate_and_normalize(
-        self,
-        analysis: dict[str, Any],
-    ) -> dict[str, Any]:
-        """
-        Ensures the SWOT response always has the agreed structure.
-        """
-
-        categories = [
-            "strengths",
-            "weaknesses",
-            "opportunities",
-            "threats",
-        ]
-
-        for category in categories:
-            if category not in analysis:
-                analysis[category] = []
-
-            if not isinstance(analysis[category], list):
-                analysis[category] = []
-
-            normalized_items = []
-
-            for item in analysis[category]:
-                if isinstance(item, str):
-                    item = {
-                        "point": item,
-                        "evidence": "",
-                        "reasoning": "",
-                        "confidence": 0.5,
-                    }
-
-                if not isinstance(item, dict):
-                    continue
-
-                confidence = item.get("confidence", 0.5)
-
-                try:
-                    confidence = float(confidence)
-                except (TypeError, ValueError):
-                    confidence = 0.5
-
-                confidence = max(
-                    0.0,
-                    min(1.0, confidence),
-                )
-
-                normalized_items.append(
-                    {
-                        "point": str(
-                            item.get("point", "")
-                        ),
-                        "evidence": str(
-                            item.get("evidence", "")
-                        ),
-                        "reasoning": str(
-                            item.get("reasoning", "")
-                        ),
-                        "confidence": confidence,
-                    }
-                )
-
-            analysis[category] = normalized_items
-
-        analysis.setdefault(
-            "strategic_summary",
-            self._create_summary(analysis),
-        )
-
-        analysis.setdefault(
-            "priority_action",
-            self._create_priority_action(analysis),
-        )
-
-        analysis["generated_at"] = datetime.now(
-            timezone.utc
-        ).isoformat()
-
-        return analysis
-
-    # =============================================================
-    # DETERMINISTIC FALLBACK
-    # =============================================================
-
-    def _generate_deterministic_swot(
-        self,
-        idea: dict[str, Any],
-        market: dict[str, Any],
-        customer: dict[str, Any],
-        competitor: dict[str, Any],
-    ) -> dict[str, Any]:
-        """
-        Produces a useful SWOT even when an LLM is unavailable.
-
-        This guarantees the agent can still execute and return
-        structured output.
-        """
-
-        strengths = []
-        weaknesses = []
-        opportunities = []
-        threats = []
-
-        # ---------------------------------------------------------
-        # Strengths
-        # ---------------------------------------------------------
-
-        advantages = self._extract_values(
-            competitor,
-            [
-                "competitive_advantages",
-                "advantages",
-                "differentiators",
-                "unique_features",
-            ],
-        )
-
-        for value in advantages[:5]:
-            strengths.append(
-                self._item(
-                    str(value),
-                    "Competitor analysis",
-                    "The analysis identifies a potential "
-                    "differentiating advantage.",
-                )
-            )
-
-        customer_needs = self._extract_values(
-            customer,
-            [
-                "pain_points",
-                "needs",
-                "customer_needs",
-                "unmet_needs",
-            ],
-        )
-
-        if customer_needs:
-            strengths.append(
-                self._item(
-                    "Alignment with identified customer needs",
-                    "Customer analysis contains identified "
-                    "pain points or needs.",
-                    "The startup can potentially address "
-                    "validated customer problems.",
-                )
-            )
-
-        # ---------------------------------------------------------
-        # Weaknesses
-        # ---------------------------------------------------------
-
-        gaps = self._extract_values(
-            competitor,
-            [
-                "market_gaps",
-                "feature_gaps",
-                "gaps",
-                "limitations",
-            ],
-        )
-
-        for value in gaps[:5]:
-            weaknesses.append(
-                self._item(
-                    str(value),
-                    "Competitor or market analysis",
-                    "The identified gap may indicate an "
-                    "execution or differentiation challenge.",
-                )
-            )
-
-        market_challenges = self._extract_values(
-            market,
-            [
-                "challenges",
-                "barriers",
-                "constraints",
-                "risks",
-            ],
-        )
-
-        for value in market_challenges[:3]:
-            weaknesses.append(
-                self._item(
-                    str(value),
-                    "Market analysis",
-                    "The factor may limit early startup execution.",
-                )
-            )
-
-        # ---------------------------------------------------------
-        # Opportunities
-        # ---------------------------------------------------------
-
-        trends = self._extract_values(
-            market,
-            [
-                "trends",
-                "market_trends",
-                "growth_trends",
-                "opportunities",
-            ],
-        )
-
-        for value in trends[:5]:
-            opportunities.append(
-                self._item(
-                    str(value),
-                    "Market analysis",
-                    "A relevant market trend may create "
-                    "an opportunity for the startup.",
-                )
-            )
-
-        market_gaps = self._extract_values(
-            market,
-            [
-                "market_gaps",
-                "unmet_needs",
-                "gaps",
-            ],
-        )
-
-        for value in market_gaps[:5]:
-            opportunities.append(
-                self._item(
-                    str(value),
-                    "Market analysis",
-                    "An unmet market need can provide "
-                    "an opportunity for entry.",
-                )
-            )
-
-        # ---------------------------------------------------------
-        # Threats
-        # ---------------------------------------------------------
-
-        competitors = self._extract_values(
-            competitor,
-            [
-                "competitors",
-                "competitive_threats",
-                "threats",
-            ],
-        )
-
-        if competitors:
-            threats.append(
-                self._item(
-                    "Established or emerging competitors",
-                    "Competitor analysis identifies existing "
-                    "players in the market.",
-                    "Competitors can reduce market share and "
-                    "increase customer acquisition difficulty.",
-                )
-            )
-
-        competitor_threats = self._extract_values(
-            competitor,
-            [
-                "threats",
-                "competitive_risks",
-                "risks",
-            ],
-        )
-
-        for value in competitor_threats[:5]:
-            threats.append(
-                self._item(
-                    str(value),
-                    "Competitor analysis",
-                    "The identified factor could negatively "
-                    "affect competitive positioning.",
-                )
-            )
-
-        market_risks = self._extract_values(
-            market,
-            [
-                "risks",
-                "market_risks",
-                "barriers",
-            ],
-        )
-
-        for value in market_risks[:5]:
-            threats.append(
-                self._item(
-                    str(value),
-                    "Market analysis",
-                    "The factor represents an external "
-                    "market threat.",
-                )
-            )
-
-        # Guarantee at least one item in every category.
-        if not strengths:
-            strengths.append(
-                self._item(
-                    "Potential alignment with the identified "
-                    "startup opportunity",
-                    "Available upstream analysis",
-                    "The startup has an opportunity to leverage "
-                    "the findings from the existing analysis.",
-                )
-            )
-
-        if not weaknesses:
-            weaknesses.append(
-                self._item(
-                    "Limited evidence available for some internal "
-                    "capabilities",
-                    "Available upstream analysis",
-                    "Insufficient evidence can make early "
-                    "strategic decisions uncertain.",
-                )
-            )
-
-        if not opportunities:
-            opportunities.append(
-                self._item(
-                    "Potential market entry opportunity",
-                    "Market analysis",
-                    "The identified market can provide room "
-                    "for a differentiated solution.",
-                )
-            )
-
-        if not threats:
-            threats.append(
-                self._item(
-                    "Competitive and market uncertainty",
-                    "Market and competitor analysis",
-                    "External market conditions may affect "
-                    "startup growth.",
-                )
-            )
-
-        result = {
-            "strengths": strengths,
-            "weaknesses": weaknesses,
-            "opportunities": opportunities,
-            "threats": threats,
-        }
-
-        result["strategic_summary"] = self._create_summary(result)
-        result["priority_action"] = self._create_priority_action(result)
-        result["generated_at"] = datetime.now(
-            timezone.utc
-        ).isoformat()
-
-        return result
-
-    # =============================================================
-    # HELPERS
-    # =============================================================
-
-    @staticmethod
-    def _item(
-        point: str,
-        evidence: str,
-        reasoning: str,
-        confidence: float = 0.75,
-    ) -> dict[str, Any]:
-
-        return {
-            "point": point,
-            "evidence": evidence,
-            "reasoning": reasoning,
-            "confidence": confidence,
-        }
-
-    @staticmethod
-    def _extract_values(
-        data: Any,
-        keys: list[str],
-    ) -> list[Any]:
-        """
-        Recursively extracts useful values from common analysis
-        structures.
-        """
-
-        if not isinstance(data, dict):
-            return []
-
-        values = []
-
-        for key in keys:
-            value = data.get(key)
-
-            if isinstance(value, list):
-                values.extend(value)
-
-            elif isinstance(value, str):
-                values.append(value)
-
-            elif isinstance(value, dict):
-                for nested_value in value.values():
-                    if isinstance(nested_value, list):
-                        values.extend(nested_value)
-                    elif isinstance(nested_value, str):
-                        values.append(nested_value)
-
-        # Convert dictionaries into readable strings.
-        cleaned = []
-
-        for value in values:
-            if isinstance(value, dict):
-                if "name" in value:
-                    cleaned.append(value["name"])
-                elif "point" in value:
-                    cleaned.append(value["point"])
-                elif "description" in value:
-                    cleaned.append(value["description"])
-                else:
-                    cleaned.append(
-                        json.dumps(value, default=str)
-                    )
-            else:
-                cleaned.append(value)
-
-        return cleaned
-
-    @staticmethod
-    def _create_summary(
-        analysis: dict[str, Any],
-    ) -> str:
-
-        strength_count = len(
-            analysis.get("strengths", [])
-        )
-        weakness_count = len(
-            analysis.get("weaknesses", [])
-        )
-        opportunity_count = len(
-            analysis.get("opportunities", [])
-        )
-        threat_count = len(
-            analysis.get("threats", [])
-        )
-
-        return (
-            f"The SWOT analysis identifies {strength_count} "
-            f"strength(s), {weakness_count} weakness(es), "
-            f"{opportunity_count} opportunit"
-            f"{'y' if opportunity_count == 1 else 'ies'}, "
-            f"and {threat_count} threat(s) based on the "
-            f"available Market, Customer and Competitor evidence."
-        )
-
-    @staticmethod
-    def _create_priority_action(
-        analysis: dict[str, Any],
-    ) -> str:
-
-        opportunities = analysis.get(
-            "opportunities",
-            [],
-        )
-
-        threats = analysis.get(
-            "threats",
-            [],
-        )
-
-        if opportunities and threats:
-            return (
-                "Prioritize the strongest validated market "
-                "opportunity while addressing the highest-risk "
-                "competitive or market threat."
-            )
-
-        return (
-            "Validate the highest-impact SWOT findings with "
-            "additional customer and market evidence before "
-            "major investment."
-        )
-
-
-# =============================================================
-# A2A-COMPATIBLE HELPER
-# =============================================================
-
-async def run_swot_agent(
-    shared_context: dict[str, Any],
-    llm_client=None,
-) -> dict[str, Any]:
-    """
-    Convenience entry point for the orchestrator/A2A layer.
-    """
-
-    agent = SWOTAgent(
-        shared_context=shared_context,
-        llm_client=llm_client,
-    )
-
-    return await agent.analyze()
-
-
-# =============================================================
-# LOCAL SMOKE TEST
-# =============================================================
-
-if __name__ == "__main__":
-    import asyncio
-
-    demo_context = {
-        "idea": {
-            "name": "Demo Startup",
-            "description": "An AI-powered startup solution.",
-        },
-        "market_analysis": {
-            "trends": [
-                "Growing adoption of AI solutions",
-                "Increasing demand for automation",
-            ],
-            "market_gaps": [
-                "Limited affordable solutions",
-            ],
-        },
-        "customer_analysis": {
-            "pain_points": [
-                "High manual effort",
-                "Limited access to affordable tools",
-            ],
-            "needs": [
-                "Automation",
-                "Easy-to-use product",
-            ],
-        },
-        "competitor_analysis": {
-            "competitors": [
-                {"name": "Competitor A"},
-                {"name": "Competitor B"},
-            ],
-            "feature_gaps": [
-                "Limited personalization",
-            ],
-            "competitive_advantages": [
-                "Potential AI-based differentiation",
-            ],
-        },
-    }
-
-    async def main():
-        result = await run_swot_agent(demo_context)
-
-        print(
-            json.dumps(
-                result,
-                indent=2,
-                default=str,
-            )
-        )
-
-        print("\nShared Context:")
-        print(
-            json.dumps(
-                demo_context,
-                indent=2,
-                default=str,
-            )
-        )
-
-    asyncio.run(main())

@@ -4,25 +4,57 @@ import { Target, AlertTriangle, ArrowRight, Activity, Clock, ShieldCheck, CheckC
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 
 const OverviewSection = ({ metadata, finalEval }) => {
-  // Extract data safely without changing backend model
-  const score = finalEval?.validation_score || 0;
-  const innoScore = finalEval?.innovation_score || 0;
-  const primaryRecommendation = finalEval?.recommendations?.[0] || 'Requires further analysis';
-  const executiveSummary = finalEval?.summary || metadata.startup_idea;
+  const startupScore = finalEval?.startup_score || {};
+  const swot = finalEval?.swot || {};
+  const risk = finalEval?.risk || {};
+  const gtm = finalEval?.gtm || {};
+
+  const score = startupScore.overall_score || 0;
+  // Use execution_score or average for innoScore out of 10
+  const innoScore = startupScore.execution_score ? Math.round(startupScore.execution_score / 10) : 0;
+  const primaryRecommendation = startupScore.verdict || 'Requires further analysis';
   
-  const biggestOpportunity = Array.isArray(finalEval?.competitive_advantages) && finalEval.competitive_advantages.length > 0 
-    ? finalEval.competitive_advantages[0] 
+  const rawSummary = finalEval?.executive_summary;
+  const executiveSummary = typeof rawSummary === 'object' && rawSummary !== null
+    ? (rawSummary.market_fit || rawSummary.founder_recommendation || metadata.startup_idea)
+    : (rawSummary || metadata.startup_idea);
+  
+  const getOpportunityText = (opp) => {
+    if (typeof opp === 'string') return opp;
+    return opp?.description || opp?.opportunity || JSON.stringify(opp);
+  };
+
+  const biggestOpportunity = Array.isArray(swot.opportunities) && swot.opportunities.length > 0 
+    ? getOpportunityText(swot.opportunities[0])
     : 'N/A';
     
-  const biggestRisk = Array.isArray(finalEval?.market_gaps) && finalEval.market_gaps.length > 0
-    ? finalEval.market_gaps[0]
-    : 'N/A';
+  const getRiskText = (r) => {
+    if (typeof r === 'string') return r;
+    return r?.description || r?.risk || JSON.stringify(r);
+  };
+
+  const getActionText = (a) => {
+    if (typeof a === 'string') return a;
+    return a?.action || a?.description || a?.step || JSON.stringify(a);
+  };
+
+  const topRisks = Array.isArray(risk.top_risks) ? risk.top_risks : (Array.isArray(risk.risks) ? risk.risks : []);
+  const biggestRisk = topRisks.length > 0 ? getRiskText(topRisks[0]) : 'N/A';
     
-  const nextAction = Array.isArray(finalEval?.recommendations) && finalEval.recommendations.length > 1
-    ? finalEval.recommendations[1]
-    : 'N/A';
+  const nextAction = Array.isArray(gtm.launch_plan) && gtm.launch_plan.length > 0
+    ? getActionText(gtm.launch_plan[0])
+    : (Array.isArray(risk.recommendations) && risk.recommendations.length > 0 ? getActionText(risk.recommendations[0]) : 'N/A');
     
-  const confidence = finalEval?.confidence || 'N/A';
+  const confidence = startupScore.confidence_level || 'N/A';
+
+  const scoringBreakdown = startupScore.overall_score !== undefined ? {
+    Market: startupScore.market_score,
+    Customer: startupScore.customer_score,
+    Competition: startupScore.competition_score,
+    Risk: startupScore.risk_score,
+    Execution: startupScore.execution_score,
+    GTM: startupScore.gtm_score
+  } : null;
 
   // Utility logic for visual styling
   const getScoreColor = (val) => {
@@ -196,11 +228,11 @@ const OverviewSection = ({ metadata, finalEval }) => {
           </div>
         </div>
         
-        {finalEval?.scoring_breakdown && Object.keys(finalEval.scoring_breakdown).length > 0 && (
+        {scoringBreakdown && Object.keys(scoringBreakdown).length > 0 && (
           <div className="mt-6 bg-surface/20 p-6 rounded-2xl border border-border/30">
             <h3 className="text-sm font-bold text-textMuted uppercase tracking-widest mb-4">Transparent Scoring Breakdown</h3>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              {Object.entries(finalEval.scoring_breakdown).map(([key, value]) => {
+              {Object.entries(scoringBreakdown).map(([key, value]) => {
                 const displayValue = typeof value === 'object' && value !== null 
                   ? (value.score || value.value || String(Object.values(value)[0] || ''))
                   : String(value);

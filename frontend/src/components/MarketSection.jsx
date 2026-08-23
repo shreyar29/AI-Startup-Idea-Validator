@@ -74,22 +74,22 @@ const MarketSection = ({ data }) => {
       </div>
 
       {/* 3: KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="glass-panel p-6 rounded-2xl border-border/50 hover:bg-surface transition-colors flex flex-col h-32">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
+        <div className="glass-panel p-6 rounded-2xl border-border/50 hover:bg-surface transition-colors flex flex-col h-auto min-h-[8rem]">
           <div className="text-textMuted text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
             <PieChartIcon className="w-4 h-4 text-primary"/> Market Size
           </div>
-          <div className="text-3xl font-bold text-textMain leading-tight mt-auto truncate" title={data.market_size}>
-            {data.market_size || 'Unknown'}
+          <div className="text-2xl md:text-3xl font-bold text-textMain leading-tight mt-auto line-clamp-3 break-words" title={data.market_size}>
+            {data.market_size === 'Insufficient verified evidence.' ? 'Evidence insufficient. Conduct industry research.' : (data.market_size || 'Unknown')}
           </div>
         </div>
         
-        <div className="glass-panel p-6 rounded-2xl border-border/50 hover:bg-surface transition-colors relative overflow-hidden flex flex-col h-32">
+        <div className="glass-panel p-6 rounded-2xl border-border/50 hover:bg-surface transition-colors relative overflow-hidden flex flex-col h-auto min-h-[8rem]">
           <div className="text-textMuted text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2 z-10">
             <TrendingUp className="w-4 h-4 text-success"/> Growth Rate
           </div>
-          <div className="text-3xl font-bold text-success leading-tight mt-auto z-10 truncate" title={data.growth_rate}>
-            {data.growth_rate || 'Unknown'}
+          <div className="text-2xl md:text-3xl font-bold text-success leading-tight mt-auto z-10 line-clamp-3 break-words" title={data.growth_rate}>
+            {data.growth_rate === 'Insufficient verified evidence.' ? 'Evidence insufficient. Validate assumptions.' : (data.growth_rate || 'Unknown')}
           </div>
           {growthNum > 0 && (
             <div className="absolute inset-0 pt-16 px-4 opacity-20 pointer-events-none" aria-hidden="true">
@@ -104,14 +104,36 @@ const MarketSection = ({ data }) => {
           )}
         </div>
 
-        <div className="glass-panel p-6 rounded-2xl border-border/50 hover:bg-surface transition-colors flex flex-col h-32">
+        <div className="glass-panel p-6 rounded-2xl border-border/50 hover:bg-surface transition-colors flex flex-col h-auto min-h-[8rem]">
           <div className="text-textMuted text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
             <Target className="w-4 h-4 text-warning"/> Market Maturity
           </div>
-          <div className="text-3xl font-bold text-textMain leading-tight capitalize mt-auto truncate" title={data.market_maturity}>
-            {data.market_maturity || 'Unknown'}
+          <div className="text-2xl md:text-3xl font-bold text-textMain leading-tight capitalize mt-auto line-clamp-3 break-words" title={data.market_maturity}>
+            {data.market_maturity === 'Insufficient verified evidence.' ? 'Evidence insufficient. Assess market lifecycle.' : (data.market_maturity || 'Unknown')}
           </div>
         </div>
+
+        {data.market_timing && (
+          <div className="glass-panel p-6 rounded-2xl border-border/50 hover:bg-surface transition-colors flex flex-col h-auto min-h-[8rem]">
+            <div className="text-textMuted text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-blue-400"/> Market Timing
+            </div>
+            <div className="text-2xl md:text-3xl font-bold text-textMain leading-tight capitalize mt-auto line-clamp-3 break-words" title={typeof data.market_timing === 'string' ? data.market_timing : data.market_timing?.reasoning?.[0]}>
+              {typeof data.market_timing === 'string' ? data.market_timing : (data.market_timing?.status || 'Unknown')}
+            </div>
+          </div>
+        )}
+
+        {data.opportunity_score !== undefined && (
+          <div className="glass-panel p-6 rounded-2xl border-border/50 hover:bg-surface transition-colors flex flex-col h-auto min-h-[8rem]">
+            <div className="text-textMuted text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
+              <Activity className="w-4 h-4 text-primary"/> Opportunity Score
+            </div>
+            <div className="text-2xl md:text-3xl font-bold text-primary leading-tight mt-auto line-clamp-3 break-words">
+              {data.opportunity_score}/100
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 4: Market Trends (Engaging Trend Cards) */}
@@ -140,11 +162,11 @@ const MarketSection = ({ data }) => {
             </h3>
             <div className="flex flex-col gap-4">
               {data.opportunities.map((opp, i) => (
-                <div key={opp} className="flex gap-4 p-5 rounded-2xl bg-success/5 border border-success/20 items-start shadow-sm transition-colors hover:bg-success/10">
+                <div key={i} className="flex gap-4 p-5 rounded-2xl bg-success/5 border border-success/20 items-start shadow-sm transition-colors hover:bg-success/10">
                   <div className="w-8 h-8 rounded-full bg-success/20 text-success flex items-center justify-center flex-shrink-0 font-bold text-sm">
                     {i + 1}
                   </div>
-                  <p className="text-sm text-textMain leading-relaxed mt-1 font-medium">{opp}</p>
+                  <p className="text-sm text-textMain leading-relaxed mt-1 font-medium">{typeof opp === 'string' ? opp : opp.description || opp.opportunity || JSON.stringify(opp)}</p>
                 </div>
               ))}
             </div>
@@ -159,11 +181,11 @@ const MarketSection = ({ data }) => {
             </h3>
             <div className="flex flex-col gap-4">
               {data.challenges.map((chal, i) => (
-                <div key={chal} className="flex gap-4 p-5 rounded-2xl bg-error/5 border border-error/20 items-start shadow-sm transition-colors hover:bg-error/10">
+                <div key={i} className="flex gap-4 p-5 rounded-2xl bg-error/5 border border-error/20 items-start shadow-sm transition-colors hover:bg-error/10">
                   <div className="w-8 h-8 rounded-full bg-error/20 text-error flex items-center justify-center flex-shrink-0 font-bold text-sm">
                     !
                   </div>
-                  <p className="text-sm text-textMain leading-relaxed mt-1 font-medium">{chal}</p>
+                  <p className="text-sm text-textMain leading-relaxed mt-1 font-medium">{typeof chal === 'string' ? chal : chal.description || chal.challenge || JSON.stringify(chal)}</p>
                 </div>
               ))}
             </div>
@@ -180,11 +202,11 @@ const MarketSection = ({ data }) => {
             </h3>
             <div className="flex flex-col gap-4">
               {data.growth_drivers.map((driver, i) => (
-                <div key={driver} className="flex gap-4 p-5 rounded-2xl bg-primary/5 border border-primary/20 items-start shadow-sm transition-colors hover:bg-primary/10">
+                <div key={i} className="flex gap-4 p-5 rounded-2xl bg-primary/5 border border-primary/20 items-start shadow-sm transition-colors hover:bg-primary/10">
                   <div className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center flex-shrink-0 font-bold text-sm">
                     {i + 1}
                   </div>
-                  <p className="text-sm text-textMain leading-relaxed mt-1 font-medium">{driver}</p>
+                  <p className="text-sm text-textMain leading-relaxed mt-1 font-medium">{typeof driver === 'string' ? driver : driver.description || driver.driver || JSON.stringify(driver)}</p>
                 </div>
               ))}
             </div>
@@ -199,11 +221,11 @@ const MarketSection = ({ data }) => {
             </h3>
             <div className="flex flex-col gap-4">
               {data.regulations.map((reg, i) => (
-                <div key={reg} className="flex gap-4 p-5 rounded-2xl bg-warning/5 border border-warning/20 items-start shadow-sm transition-colors hover:bg-warning/10">
+                <div key={i} className="flex gap-4 p-5 rounded-2xl bg-warning/5 border border-warning/20 items-start shadow-sm transition-colors hover:bg-warning/10">
                   <div className="w-8 h-8 rounded-full bg-warning/20 text-warning flex items-center justify-center flex-shrink-0 font-bold text-sm">
                     §
                   </div>
-                  <p className="text-sm text-textMain leading-relaxed mt-1 font-medium">{reg}</p>
+                  <p className="text-sm text-textMain leading-relaxed mt-1 font-medium">{typeof reg === 'string' ? reg : reg.description || reg.regulation || JSON.stringify(reg)}</p>
                 </div>
               ))}
             </div>

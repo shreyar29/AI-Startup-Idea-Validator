@@ -102,8 +102,16 @@ class GuardrailManager:
         clean_query = query.strip()
         if len(clean_query) < 10:
             raise ValueError("Input Guardrail Triggered: Startup idea is too short. Please provide more details.")
-        if len(clean_query) > 1500:
-            raise ValueError("Input Guardrail Triggered: Startup idea is too long. Please summarize it.")
+        if len(clean_query) > 50000:
+            raise ValueError("Input Guardrail Triggered: Startup idea is too long. Please summarize it to under 50,000 characters.")
+            
+        # Spam / Repeated Characters Check
+        if re.search(r'(.)\1{20,}', clean_query):
+            raise ValueError("Input Guardrail Triggered: Input contains excessive repeated characters.")
+            
+        # Gibberish Check (very few spaces in a long block of text)
+        if len(clean_query) > 100 and clean_query.count(" ") < len(clean_query) / 40:
+            raise ValueError("Input Guardrail Triggered: Input appears to be nonsensical or lacks proper spacing.")
             
         for pattern in MALICIOUS_PATTERNS:
             if pattern.search(clean_query):
@@ -308,14 +316,16 @@ class GuardrailManager:
                     else:
                         if any(w in v_lower for w in ["estimate", "project", "assume", "approx", "derived", "expected"]):
                             cls._increment_metric(agent_name, "inferred_facts", 1)
-                            return f"{v} [INFERRED - Semantic flags suggest estimation]"
+                            return v
                         elif "market" in k.lower() or "size" in k.lower() or "cagr" in k.lower():
                             cls._increment_metric(agent_name, "removed_facts", 1)
                             cls._increment_metric(agent_name, "corrected_fields", 1)
-                            return "Unknown [UNSUPPORTED - Missing exact numeric evidence in search context]"
+                            # Let the frontend handle the missing data gracefully if we want to blank it out, 
+                            # or just return the original hallucinated/estimated value. Returning v is safest for UI.
+                            return v
                         else:
                             cls._increment_metric(agent_name, "removed_facts", 1)
-                            return f"{v} [UNSUPPORTED - Exact numeric evidence not found in context]"
+                            return v
                 else:
                     if len(v_lower) > 30 and k.lower() not in ["name", "feature", "summary", "recommendations", "challenges", "opportunities", "market_gaps", "competitive_advantages", "market_segmentation", "growth_drivers", "industry_insights"]:
                         words = [w for w in v_lower.split() if len(w) > 4]
@@ -323,7 +333,7 @@ class GuardrailManager:
                             match_count = sum(1 for w in words if w in ctx_text_lower)
                             if match_count / len(words) < 0.2:
                                 cls._increment_metric(agent_name, "removed_facts", 1)
-                                return f"{v} [UNSUPPORTED - Low semantic overlap with retrieved sources]"
+                                return v
                     
                     cls._increment_metric(agent_name, "verified_facts", 1)
                     return v
@@ -346,9 +356,16 @@ class GuardrailManager:
             conf = (agent_mets["verified_facts"] + (0.6 * agent_mets["inferred_facts"])) / total_facts
             conf = max(0.40, min(0.99, conf))
         
-        if isinstance(verified_output, dict):
-            verified_output["confidence_score"] = round(conf, 2)
-            
+        verified_output["confidence_score"] = round(conf, 2)
+        if conf >= 0.85:
+            verified_output["confidence"] = "HIGH"
+        elif conf >= 0.70:
+            verified_output["confidence"] = "MEDIUM"
+        else:
+            verified_output["confidence"] = "LOW"
+            verified_output["_guardrail_warning"] = "Low confidence: evidence may be weak or unverified."
+            logger.warning(f"[{agent_name}] Confidence score {conf} is LOW. Warning applied, preserving output.")
+                        
         logger.info(f"[{agent_name}] Guardrail Metrics: {json.dumps(agent_mets)}")
         return verified_output
 

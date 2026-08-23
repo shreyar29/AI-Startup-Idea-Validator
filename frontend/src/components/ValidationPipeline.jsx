@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2, CircleDashed, Loader2, XCircle, Terminal, WifiOff } from 'lucide-react';
+import { VeraLoader } from './vera/VeraLoader';
 
 const STAGES = [
   { id: 'Query Strategist', label: 'Research Strategy', type: 'single', agents: ['Query Strategist'] },
@@ -20,6 +21,7 @@ const ValidationPipeline = ({ requestId }) => {
   const [agentStatuses, setAgentStatuses] = useState({});
   const [pipelineStatus, setPipelineStatus] = useState('running'); // running, completed, failed
   const [connectionStatus, setConnectionStatus] = useState('connecting'); // connecting, connected, reconnecting, closed
+  const [currentActiveStep, setCurrentActiveStep] = useState(null);
 
   useEffect(() => {
     if (!requestId) return;
@@ -36,6 +38,10 @@ const ValidationPipeline = ({ requestId }) => {
         const data = JSON.parse(event.data);
         const { agent, status, message, id } = data;
         const eventId = id || event.lastEventId || `${Date.now()}-${Math.random()}`;
+
+        if (agent && agent !== 'Orchestrator') {
+          setCurrentActiveStep(agent);
+        }
 
         setAgentStatuses(prev => ({
           ...prev,
@@ -104,11 +110,25 @@ const ValidationPipeline = ({ requestId }) => {
   return (
     <div className="flex flex-col items-center justify-center min-h-[70vh] px-4 w-full max-w-5xl mx-auto space-y-8 py-12">
       
-      {/* Header & Progress Bar */}
+      {/* Vera Intelligence Loader */}
+      <div className="w-full">
+        {pipelineStatus !== 'completed' && pipelineStatus !== 'failed' && (
+          <VeraLoader currentStep={currentActiveStep} />
+        )}
+        
+        {pipelineStatus === 'completed' && (
+           <h2 className="text-3xl font-bold text-textMain tracking-tight text-center">
+             Validation Complete
+           </h2>
+        )}
+        {pipelineStatus === 'failed' && (
+           <h2 className="text-3xl font-bold text-textMain tracking-tight text-center">
+             Validation Failed
+           </h2>
+        )}
+      </div>
+
       <div className="w-full text-center space-y-4">
-        <h2 className="text-3xl font-bold text-textMain tracking-tight">
-          {pipelineStatus === 'completed' ? 'Validation Complete' : pipelineStatus === 'failed' ? 'Validation Failed' : 'VentureLens AI is analyzing your startup'}
-        </h2>
         <div 
           className="w-full h-2 bg-surface/50 rounded-full overflow-hidden border border-border"
           role="progressbar"

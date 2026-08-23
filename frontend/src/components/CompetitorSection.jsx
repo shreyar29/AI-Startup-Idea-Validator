@@ -18,7 +18,7 @@ const CompetitorSection = ({ data }) => {
   
   if (competitors.length === 0) return null;
 
-  const gapAnalysis = data?.gap_analysis || [];
+  const gapAnalysis = data?.competitor_gaps || data?.gap_analysis || [];
   
   // Synthesize Executive Summary without inventing new backend fields
   const topCompetitorName = competitors[0]?.name || 'established players';
@@ -79,6 +79,60 @@ const CompetitorSection = ({ data }) => {
         </div>
       </div>
 
+      {/* 2.5: Competitor Battlecard Matrix */}
+      <div className="space-y-6 pt-4">
+        <h3 className="text-[10px] font-bold text-textMuted uppercase tracking-widest flex items-center gap-2 border-b border-border/30 pb-3">
+          <Activity className="w-3.5 h-3.5 text-vera-cyan" /> Competitor Battlecard
+        </h3>
+        <div className="overflow-x-auto w-full pb-4">
+          <table className="w-full text-left border-collapse min-w-[800px]">
+            <thead>
+              <tr>
+                <th className="p-4 bg-surface/50 border border-border/50 font-bold text-textMain rounded-tl-xl w-1/4">Feature / Metric</th>
+                {competitors.slice(0, 3).map((comp, i) => (
+                  <th key={i} className="p-4 bg-surface/30 border border-border/50 font-bold text-textMain text-center">
+                    {comp.name}
+                    {comp.threat_score && <div className="text-[10px] text-vera-amber mt-1 font-normal">Threat: {comp.threat_score}/100</div>}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="p-4 bg-surface/20 border border-border/50 font-medium text-textMuted text-sm">Pricing</td>
+                {competitors.slice(0, 3).map((comp, i) => (
+                  <td key={i} className="p-4 bg-surface/10 border border-border/50 text-sm text-center text-success">{comp.pricing || '-'}</td>
+                ))}
+              </tr>
+              <tr>
+                <td className="p-4 bg-surface/20 border border-border/50 font-medium text-textMuted text-sm">Target Customers</td>
+                {competitors.slice(0, 3).map((comp, i) => (
+                  <td key={i} className="p-4 bg-surface/10 border border-border/50 text-sm text-center text-textMain">{comp.target_customers || '-'}</td>
+                ))}
+              </tr>
+              <tr>
+                <td className="p-4 bg-surface/20 border border-border/50 font-medium text-textMuted text-sm">Business Model</td>
+                {competitors.slice(0, 3).map((comp, i) => (
+                  <td key={i} className="p-4 bg-surface/10 border border-border/50 text-sm text-center text-primary">{comp.business_model || '-'}</td>
+                ))}
+              </tr>
+              <tr>
+                <td className="p-4 bg-surface/20 border border-border/50 font-medium text-textMuted text-sm">Key Weakness</td>
+                {competitors.slice(0, 3).map((comp, i) => {
+                  const rawWeak = comp.weaknesses && comp.weaknesses[0] ? comp.weaknesses[0] : '-';
+                  const weakStr = typeof rawWeak === 'string' ? rawWeak : (rawWeak?.description || rawWeak?.weakness || JSON.stringify(rawWeak));
+                  return (
+                    <td key={i} className="p-4 bg-surface/10 border border-border/50 text-sm text-center text-error">
+                      {weakStr}
+                    </td>
+                  );
+                })}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* 3: Top Competitors */}
       <div className="space-y-6 pt-8">
         <h3 className="text-[10px] font-bold text-textMuted uppercase tracking-widest flex items-center gap-2 border-b border-border/30 pb-3">
@@ -94,25 +148,25 @@ const CompetitorSection = ({ data }) => {
                   <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-surface to-background border border-border flex items-center justify-center text-2xl font-black text-white shadow-inner flex-shrink-0">
                     {comp.name ? comp.name.charAt(0).toUpperCase() : '?'}
                   </div>
-                  <div className="min-w-0">
-                    <h3 className="text-xl md:text-2xl font-extrabold text-textMain tracking-tight truncate">{comp.name || 'Unknown Competitor'}</h3>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-xl md:text-2xl font-extrabold text-textMain tracking-tight line-clamp-2 break-words" title={comp.name || 'Unknown Competitor'}>{comp.name || 'Unknown Competitor'}</h3>
                     {comp.target_customers && comp.target_customers !== "Unavailable" && comp.target_customers !== "Unknown" && (
-                      <p className="text-[10px] uppercase font-bold text-textMuted tracking-wider mt-1 line-clamp-1">{comp.target_customers}</p>
+                      <p className="text-[10px] uppercase font-bold text-textMuted tracking-wider mt-1 line-clamp-2 break-words" title={comp.target_customers}>{comp.target_customers}</p>
                     )}
                   </div>
                 </div>
                 
-                <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+                <div className="flex flex-wrap items-center gap-2 flex-shrink-0 w-full sm:w-auto mt-4 sm:mt-0">
                   {comp.business_model && comp.business_model !== "Unknown" && (
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 rounded-xl border border-primary/20 shadow-sm max-w-[150px]">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 rounded-xl border border-primary/20 shadow-sm max-w-[200px]">
                       <Activity className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-                      <span className="text-xs font-bold text-primary uppercase tracking-wider truncate">{comp.business_model}</span>
+                      <span className="text-xs font-bold text-primary uppercase tracking-wider line-clamp-1 break-all" title={comp.business_model}>{comp.business_model}</span>
                     </div>
                   )}
                   {comp.pricing && comp.pricing !== "Unknown" && (
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-success/10 rounded-xl border border-success/20 shadow-sm max-w-[150px]">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-success/10 rounded-xl border border-success/20 shadow-sm max-w-[200px]">
                       <DollarSign className="w-3.5 h-3.5 text-success flex-shrink-0" />
-                      <span className="text-xs font-bold text-success uppercase tracking-wider truncate">{comp.pricing}</span>
+                      <span className="text-xs font-bold text-success uppercase tracking-wider line-clamp-1 break-all" title={comp.pricing}>{comp.pricing}</span>
                     </div>
                   )}
                 </div>
@@ -131,7 +185,7 @@ const CompetitorSection = ({ data }) => {
                           {comp.strengths.map((str, j) => (
                             <li key={j} className="text-xs font-medium text-textMain leading-relaxed flex items-start gap-2.5">
                               <span className="w-1.5 h-1.5 rounded-full bg-success mt-1 flex-shrink-0"></span>
-                              {str}
+                              {typeof str === 'string' ? str : (str?.description || str?.strength || JSON.stringify(str))}
                             </li>
                           ))}
                         </ul>
@@ -147,7 +201,7 @@ const CompetitorSection = ({ data }) => {
                           {comp.weaknesses.map((wk, j) => (
                             <li key={j} className="text-xs font-medium text-textMain leading-relaxed flex items-start gap-2.5">
                               <span className="w-1.5 h-1.5 rounded-full bg-error mt-1 flex-shrink-0"></span>
-                              {wk}
+                              {typeof wk === 'string' ? wk : (wk?.description || wk?.weakness || JSON.stringify(wk))}
                             </li>
                           ))}
                         </ul>

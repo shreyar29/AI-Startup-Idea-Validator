@@ -5,6 +5,7 @@ import {
   Sparkles, ArrowRight, Search, Target, Users, 
   BrainCircuit, CheckCircle2, Lightbulb, LineChart, ShieldCheck
 } from 'lucide-react';
+import { VeraHero } from '../components/vera/VeraHero';
 
 const SUGGESTIONS = [
   { industry: "Cybersecurity", title: "SOC2 Automation", desc: "A B2B SaaS platform that automates SOC2 compliance for startups." },
@@ -104,8 +105,12 @@ const Home = () => {
             Deploy an intelligent swarm of AI agents to gain evidence-backed confidence, real-time market validation, and data-driven decision making before writing a single line of code.
           </p>
 
+          <div className="mt-8">
+            <VeraHero inputValue={idea} />
+          </div>
+
           {/* 3. Significantly increased textarea width for dominance */}
-          <form onSubmit={submitForm} className="relative max-w-5xl xl:max-w-6xl mx-auto mt-10 text-left">
+          <form onSubmit={submitForm} className="relative max-w-5xl xl:max-w-6xl mx-auto mt-6 text-left">
             {/* Glow behind textarea */}
             <div className={`absolute -inset-1 rounded-3xl blur-xl transition-all duration-500 ${isFocused ? 'bg-primary/20 opacity-100' : 'opacity-0'}`} />
             
@@ -130,7 +135,6 @@ const Home = () => {
                   onFocus={() => setIsFocused(true)}
                   onBlur={() => setIsFocused(false)}
                   className="w-full bg-transparent text-textMain resize-none outline-none p-6 pt-12 text-lg sm:text-xl font-medium leading-relaxed min-h-[160px] transition-all duration-200 overflow-hidden relative z-10 placeholder-transparent focus:ring-0"
-                  maxLength={1000}
                   required
                 />
               </div>
@@ -139,8 +143,8 @@ const Home = () => {
               <div className="flex flex-col sm:flex-row justify-between items-center gap-4 px-6 pb-6 pt-4 border-t border-white/5 bg-black/20">
                 
                 <div className="flex flex-col gap-1 w-full sm:w-auto text-center sm:text-left">
-                  <span className={`text-xs font-medium ${idea.length > 900 ? 'text-warning' : 'text-textMuted'}`}>
-                    {idea.length} <span className="opacity-40">/ 1000 characters</span>
+                  <span className={`text-xs font-medium ${idea.length > 50000 ? 'text-warning' : 'text-textMuted'}`}>
+                    {idea.length.toLocaleString()} characters ({idea.trim().split(/\s+/).filter(Boolean).length.toLocaleString()} words)
                   </span>
                   <span className="hidden sm:inline text-[11px] text-textMuted/40 font-mono tracking-widest uppercase mt-0.5">
                     Press {modifierKey} ↵ to analyze

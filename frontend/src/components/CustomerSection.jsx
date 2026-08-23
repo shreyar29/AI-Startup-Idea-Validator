@@ -140,9 +140,9 @@ const CustomerSection = ({ data }) => {
           <div className="flex flex-col gap-3 flex-grow">
             {painPoints.length > 0 ? painPoints.slice(0, 3).map((pt, i) => (
               <div key={i} className="text-sm font-medium text-textMain leading-relaxed p-4 bg-error/5 rounded-xl border border-error/10">
-                {pt}
+                {safeString(pt)}
               </div>
-            )) : <div className="text-sm text-textDim italic">Insufficient verified evidence.</div>}
+            )) : <div className="text-sm text-textDim italic">Evidence insufficient. Conduct customer interviews to validate pain points.</div>}
           </div>
         </div>
 
@@ -153,9 +153,9 @@ const CustomerSection = ({ data }) => {
           <div className="flex flex-col gap-3 flex-grow">
             {goals.length > 0 ? goals.slice(0, 3).map((goal, i) => (
               <div key={i} className="text-sm font-medium text-textMain leading-relaxed p-4 bg-primary/5 rounded-xl border border-primary/10">
-                {goal}
+                {safeString(goal)}
               </div>
-            )) : <div className="text-sm text-textDim italic">Insufficient verified evidence.</div>}
+            )) : <div className="text-sm text-textDim italic">Evidence insufficient. Validate customer goals through surveys.</div>}
           </div>
         </div>
 
@@ -166,9 +166,9 @@ const CustomerSection = ({ data }) => {
           <div className="flex flex-col gap-3 flex-grow">
             {unmetNeeds.length > 0 ? unmetNeeds.slice(0, 3).map((need, i) => (
               <div key={i} className="text-sm font-medium text-textMain leading-relaxed p-4 bg-success/5 rounded-xl border border-success/10">
-                {need}
+                {safeString(need)}
               </div>
-            )) : <div className="text-sm text-textDim italic">Insufficient verified evidence.</div>}
+            )) : <div className="text-sm text-textDim italic">Evidence insufficient. Assess unmet market needs.</div>}
           </div>
         </div>
       </div>
@@ -186,7 +186,7 @@ const CustomerSection = ({ data }) => {
               <div key={i} className="glass-panel p-5 rounded-xl border-l-4 border-l-warning/70 hover:-translate-y-0.5 transition-transform shadow-sm bg-gradient-to-r from-surface to-background">
                 <p className="text-sm text-textMain font-medium leading-relaxed">{bb}</p>
               </div>
-            )) : <div className="text-sm text-textDim italic px-2">Insufficient verified evidence.</div>}
+            )) : <div className="text-sm text-textDim italic px-2">Evidence insufficient. Research target demographic spending habits.</div>}
           </div>
         </div>
 
@@ -216,7 +216,7 @@ const CustomerSection = ({ data }) => {
                   {reason && <p className="text-xs text-textMuted leading-relaxed">{reason}</p>}
                 </div>
               );
-            }) : <div className="text-sm text-textDim italic px-2">Insufficient verified evidence.</div>}
+            }) : <div className="text-sm text-textDim italic px-2">Evidence insufficient. Map feature priorities with beta testers.</div>}
           </div>
         </div>
       </div>
@@ -250,7 +250,7 @@ const CustomerSection = ({ data }) => {
             <div className="flex flex-wrap gap-2">
               {segments.map((seg, i) => (
                 <span key={i} className="text-[10px] font-bold text-textMuted uppercase tracking-wider bg-surface/50 border border-border/50 px-3 py-1.5 rounded-md">
-                  {seg}
+                  {safeString(seg)}
                 </span>
               ))}
             </div>

@@ -123,6 +123,11 @@ class ComparisonAgent:
         market = self.context.get("market_analysis", {})
         customer = self.context.get("customer_analysis", {})
         competitor = self.context.get("competitor_analysis", {})
+        risk = self.context.get("risk_analysis", {})
+        swot = self.context.get("swot_analysis", {})
+        mvp = self.context.get("mvp_analysis", {})
+        gtm = self.context.get("gtm_analysis", {})
+        startup_score = self.context.get("startup_score_analysis", {})
         idea = self.context.get("idea", {})
 
         available = []
@@ -154,24 +159,14 @@ class ComparisonAgent:
         context_payload = {
             "startup_idea": idea.get("description", ""),
             "proposed_features": proposed_features,
-            "market_insights": {
-                "size": market.get("market_size", "Unknown"),
-                "growth": market.get("growth_rate", "Unknown"),
-                "trends": (market.get("market_trends") or [])[:3],
-                "opportunities": (market.get("opportunities") or [])[:2]
-            } if "market" in available else "Missing",
-            "customer_insights": {
-                "segments": (customer.get("target_customer_segments") or [])[:2],
-                "pain_points": (customer.get("pain_points") or [])[:3],
-                "feature_demand": (customer.get("feature_demand") or [])[:3]
-            } if "customer" in available else "Missing",
-            "competitor_insights": [
-                {
-                    "name": c.get("name"),
-                    "features": (c.get("features") or [])[:3],
-                    "pricing": c.get("pricing", "Unknown")
-                } for c in (competitor.get("competitors") or [])[:3]
-            ] if "competitor" in available else "Missing"
+            "market_insights": market if "market" in available else "Missing",
+            "customer_insights": customer if "customer" in available else "Missing",
+            "competitor_insights": competitor if "competitor" in available else "Missing",
+            "risk_insights": risk,
+            "swot_insights": swot,
+            "mvp_insights": mvp,
+            "gtm_insights": gtm,
+            "startup_score": startup_score
         }
 
         compact_payload = json.dumps(context_payload, separators=(',', ':'))
@@ -184,8 +179,9 @@ class ComparisonAgent:
             f"3. 'recommendation' MUST be one of: 'Strongly Recommended', 'Recommended', 'Needs Improvement', 'Not Recommended'.\n"
             f"4. 'key_risks' and 'next_steps' MUST be arrays of max 5 strings.\n"
             f"5. 'scoring_breakdown' MUST be an object with string values like '25/30' for 'Market Opportunity', 'Competition', 'Customer Demand', 'Innovation', 'Execution Feasibility' summing to validation_score.\n"
-            f"6. 'market_fit' MUST be a detailed executive summary explaining WHY. Include Top strengths, Top weaknesses, Top opportunities, Top risks, and Evidence supporting each. Do not just summarize.\n"
-            f"7. Output ONLY valid JSON containing EXACTLY these keys: 'market_fit', 'competitive_advantage', 'innovation_score', 'validation_score', 'scoring_breakdown', 'recommendation', 'key_risks', 'next_steps'.\n\n"
+            f"6. 'market_fit' MUST be a detailed summary explaining WHY. Include Top strengths, Top weaknesses, Top opportunities, Top risks, and Evidence supporting each. Do not just summarize.\n"
+            f"7. You must generate an 'executive_summary' object with exactly: 'startup_verdict' (Highly Promising, Promising, Proceed With Caution, High Risk, or Not Recommended), 'market_potential' (High, Medium, Low), 'biggest_opportunity' (string), 'biggest_risk' (string), 'recommended_next_step' (string), 'founder_recommendation' (2-3 sentences).\n"
+            f"8. Output ONLY valid JSON containing EXACTLY these keys: 'market_fit', 'competitive_advantage', 'innovation_score', 'validation_score', 'scoring_breakdown', 'recommendation', 'key_risks', 'next_steps', 'executive_summary'.\n\n"
             f"Input Data:\n{compact_payload}"
         )
 
@@ -259,6 +255,15 @@ class ComparisonAgent:
 
         summary = str(parsed_analysis.get("market_fit", "Validation summary could not be generated."))
         scoring_breakdown = parsed_analysis.get("scoring_breakdown") or {}
+        
+        executive_summary = parsed_analysis.get("executive_summary", {
+            "startup_verdict": "Not Recommended",
+            "market_potential": "Low",
+            "biggest_opportunity": "Unknown",
+            "biggest_risk": "Unknown",
+            "recommended_next_step": "Review data",
+            "founder_recommendation": "Data synthesis failed."
+        })
 
         if len(available) == 3:
             confidence = "High"
@@ -365,6 +370,7 @@ class ComparisonAgent:
 
         self.status = "success"
         analysis = {
+            "executive_summary": executive_summary,
             "feature_comparison": feature_comparison,
             "feature_summary": feature_summary,
             "competitive_advantages": comp_adv_list,
@@ -391,9 +397,9 @@ class ComparisonAgent:
         }
         logger.info(f"{log_prefix} Processing Stats: {stats}")
 
-        logger.debug(f"--- COMPARISON AGENT COMPLETE PAYLOAD ---")
-        logger.debug(json.dumps(analysis, indent=2))
-        logger.debug("-----------------------------------------")
+        
+        
+        
 
         duration = time.perf_counter() - start_time
         logger.info(f"{log_prefix} Successful completion in {duration:.2f}s. Output ready for Orchestrator.")
@@ -402,6 +408,14 @@ class ComparisonAgent:
 
     def _return_fallback(self, reason: str, log_prefix: str = "ComparisonAgent:"):
         analysis = {
+            "executive_summary": {
+                "startup_verdict": "Not Recommended",
+                "market_potential": "Low",
+                "biggest_opportunity": "None",
+                "biggest_risk": "Analysis failed",
+                "recommended_next_step": "Retry analysis",
+                "founder_recommendation": f"Validation failed: {reason}"
+            },
             "feature_comparison": [],
             "competitive_advantages": [],
             "market_gaps": [],

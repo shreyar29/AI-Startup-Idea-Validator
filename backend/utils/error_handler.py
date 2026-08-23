@@ -219,12 +219,7 @@ def safe_parse_llm_json(raw_text, required_keys=None, retry_attempt=0):
     except (json.JSONDecodeError, TypeError) as exc:
         raw_parse_success = False
         raw_len = len(raw_text)
-        first_500 = raw_text[:500]
-        last_500 = raw_text[-500:] if raw_len > 500 else ""
-        logger.warning("JSON Parse failed. Length: %d, Retry: %d, Exception: %s", raw_len, retry_attempt, exc)
-        logger.warning("First 500 chars: %s", first_500)
-        logger.warning("Last 500 chars: %s", last_500)
-        logger.warning(f"Standard JSON decode failed: {exc}. Attempting automatic repair.")
+        logger.info(f"JSON decode failed (Length: {raw_len}): {exc}. Attempting automatic repair.")
         try:
             # Fallback to the json-repair library which handles missing commas, unescaped quotes, etc.
             repaired = json_repair.repair_json(cleaned, return_objects=True)

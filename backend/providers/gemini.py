@@ -37,6 +37,22 @@ class GeminiProvider(BaseLLMProvider):
         except Exception as e:
             raise LLMProviderError(str(e)) from e
 
+    async def generate_stream(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float = 0.2,
+    ):
+        try:
+            async for chunk in self._client.generate_stream(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=temperature,
+            ):
+                yield chunk
+        except Exception as e:
+            raise LLMProviderError(str(e)) from e
+
     async def close(self) -> None:
         await self._client.close()
 

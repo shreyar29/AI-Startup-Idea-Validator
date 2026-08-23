@@ -21,8 +21,9 @@ import logging
 import time
 import uuid
 from typing import Any, Dict
+from telemetry.metrics_service import MetricsService
 
-from core.config import settings
+from core.agent_config import AGENT_REGISTRY
 from guardrails.manager import GuardrailManager
 from utils.progress import ProgressManager
 
@@ -34,18 +35,22 @@ from agents.competitor_agent import CompetitorAgent
 from agents.customer_agent import CustomerAgent
 from agents.comparison_agent import ComparisonAgent
 from agents.risk_agent import RiskAgent
+from agents.swot_agent import SWOTAgent
+from agents.mvp_agent import MVPAgent
+from agents.gtm_agent import GTMAgent
+from agents.startup_score_agent import StartupScoreAgent
 
+# Pydantic Agent Contracts
+from agents.agent_contracts import (
+    MarketAnalysis, CustomerAnalysis, CompetitorAnalysis,
+    RiskAnalysis, SWOTAnalysis, MVPAnalysis, GTMAnalysis
+)
 
 logger = logging.getLogger(__name__)
 
 
 class OrchestrationError(Exception):
     """Base exception for orchestrator errors."""
-    pass
-
-
-class PayloadIntegrityError(OrchestrationError):
-    """Raised when critical payloads are missing or invalid."""
     pass
 
 
@@ -84,6 +89,12 @@ class MeshNodeWrapper:
 
         return await self._task
 
+    def _safe_publish(self, request_id: str, component: str, status: str, message: str):
+        if not request_id:
+            return
+        task = asyncio.create_task(ProgressManager.publish(request_id, component, status, message))
+        task.add_done_callback(lambda t: t.exception())
+
     async def _execute(self):
         """Execute the wrapped agent with timeout and error handling."""
         start_time = time.time()
@@ -100,17 +111,11 @@ class MeshNodeWrapper:
             f"{self.name}: Execution started."
         )
 
-        request_id = getattr(self.node, "context", {}).get("request_id")
+        context = getattr(self.node, "context", {})
+        request_id = context.get("request_id") if isinstance(context, dict) else getattr(context, "request_id", None)
 
         if request_id and self.name != "Web Search Agent":
-            asyncio.create_task(
-                ProgressManager.publish(
-                    request_id,
-                    self.name,
-                    "running",
-                    "Analyzing data...",
-                )
-            )
+            self._safe_publish(request_id, self.name, "running", "Analyzing data...")
 
         try:
             result = await asyncio.wait_for(
@@ -127,6 +132,7 @@ class MeshNodeWrapper:
                     "duration": round(duration, 2),
                 }
             )
+            MetricsService.record_agent_execution(self.name, duration, "success")
 
             logger.info(
                 f"[{self.correlation_id}] "
@@ -157,6 +163,7 @@ class MeshNodeWrapper:
                     "error": "Timeout exceeded",
                 }
             )
+            MetricsService.record_agent_execution(self.name, duration, "timeout", "Timeout exceeded")
 
             logger.error(
                 f"[{self.correlation_id}] "
@@ -197,15 +204,17 @@ class MeshNodeWrapper:
 
         except Exception as exc:
             duration = time.time() - start_time
+            error_summary = f"Task failed with {type(exc).__name__}"
 
             self.metrics[self.name].update(
                 {
                     "status": "failed",
                     "end_time": time.time(),
                     "duration": round(duration, 2),
-                    "error": str(exc),
+                    "error": error_summary,
                 }
             )
+            MetricsService.record_agent_execution(self.name, duration, "failed", error_summary)
 
             logger.exception(
                 f"[{self.correlation_id}] "
@@ -229,17 +238,6 @@ class MeshNodeWrapper:
 class StartupValidatorOrchestrator:
     """
     Coordinates the complete multi-agent startup validation workflow.
-
-    Mesh:
-        Web Search
-             |
-        +----+----+---------+---------+
-        |         |         |         |
-      Market   Customer  Competitor Comparison
-                                      |
-                                     Risk
-
-    All nodes are directly connected through the shared peer map.
     """
 
     def __init__(
@@ -248,21 +246,27 @@ class StartupValidatorOrchestrator:
         search_service: Any,
         result_processor: Any,
     ):
-        """
-        Dependency injection for shared LLM and search services.
-        """
         self.llm_client = llm_client
         self.search_service = search_service
         self.result_processor = result_processor
+
+    def _safe_publish(self, request_id: str, component: str, status: str, message: str):
+        if not request_id:
+            return
+        task = asyncio.create_task(ProgressManager.publish(request_id, component, status, message))
+        task.add_done_callback(lambda t: t.exception())
+
+    # Ephemeral memory context storage removed in favor of Database persistence in chat_routes.py
 
     async def validate_idea(
         self,
         startup_idea: str,
         request_id: str = None,
     ) -> Dict[str, Any]:
-        """
-        Execute the complete startup idea validation pipeline.
-        """
+        # Input Safety Hardening
+        startup_idea = startup_idea.strip()[:2000]
+        if not startup_idea:
+            raise ValueError("Startup idea cannot be empty or solely whitespace.")
 
         correlation_id = str(uuid.uuid4())[:8]
         start_time = time.time()
@@ -270,505 +274,254 @@ class StartupValidatorOrchestrator:
         logger.info(
             f"[{correlation_id}] "
             f"P2P Mesh Network starting validation "
-            f"for idea: '{startup_idea}'"
+            f"for idea of length: {len(startup_idea)}"
         )
 
-        # ================================================================
-        # SHARED CONTEXT
-        # ================================================================
-
-        shared_context = {
-            "idea": {
-                "description": startup_idea,
-                "proposed_features": [],
-            },
-            "correlation_id": correlation_id,
-            "request_id": request_id,
-
-            "research": {},
-
-            "market_analysis": {},
-            "customer_analysis": {},
-            "competitor_analysis": {},
-            "comparison_analysis": {},
-            "risk_analysis": {},
-        }
-
+        shared_context = self._build_shared_context(startup_idea, correlation_id, request_id)
         metrics: Dict[str, Any] = {}
 
         try:
-            # ============================================================
-            # 1. CREATE ALL AGENTS
-            # ============================================================
-
-            query_strategist = QueryStrategist(
-                llm_client=self.llm_client
-            )
-
-            web_search_node = WebSearchAgent(
-                query_strategist,
-                self.search_service,
-                self.result_processor,
-                shared_context,
-            )
-
-            market_node = MarketOpportunityAgent(
-                shared_context,
-                llm_client=self.llm_client,
-            )
-
-            customer_node = CustomerAgent(
-                shared_context,
-                llm_client=self.llm_client,
-            )
-
-            competitor_node = CompetitorAgent(
-                shared_context,
-                llm_client=self.llm_client,
-            )
-
-            comparison_node = ComparisonAgent(
-                shared_context,
-                llm_client=self.llm_client,
-            )
-
-            # ============================================================
-            # RISK AGENT
-            # ============================================================
-
-            risk_node = RiskAgent(
-                shared_context,
-                llm_client=self.llm_client,
-            )
-
-            # ============================================================
-            # 2. CREATE FULL P2P MESH
-            # ============================================================
-
-            # Use a dedicated risk timeout if it exists in config.
-            # Otherwise fall back to comparison timeout so this file
-            # does not require a new config variable.
-            risk_timeout = getattr(
-                settings.orchestrator,
-                "RISK_AGENT_TIMEOUT",
-                settings.orchestrator.COMPARISON_AGENT_TIMEOUT,
-            )
-
-            wrapped_peers = {
-                "web_search": MeshNodeWrapper(
-                    "Web Search Agent",
-                    web_search_node,
-                    metrics,
-                    correlation_id,
-                    timeout=settings.orchestrator.WEB_SEARCH_TIMEOUT,
-                ),
-
-                "market": MeshNodeWrapper(
-                    "Market Agent",
-                    market_node,
-                    metrics,
-                    correlation_id,
-                    timeout=settings.orchestrator.MARKET_AGENT_TIMEOUT,
-                ),
-
-                "customer": MeshNodeWrapper(
-                    "Customer Agent",
-                    customer_node,
-                    metrics,
-                    correlation_id,
-                    timeout=settings.orchestrator.CUSTOMER_AGENT_TIMEOUT,
-                ),
-
-                "competitor": MeshNodeWrapper(
-                    "Competitor Agent",
-                    competitor_node,
-                    metrics,
-                    correlation_id,
-                    timeout=settings.orchestrator.COMPETITOR_AGENT_TIMEOUT,
-                ),
-
-                "comparison": MeshNodeWrapper(
-                    "Comparison Agent",
-                    comparison_node,
-                    metrics,
-                    correlation_id,
-                    timeout=settings.orchestrator.COMPARISON_AGENT_TIMEOUT,
-                ),
-
-                # ========================================================
-                # RISK AGENT IS NOW PART OF THE MESH
-                # ========================================================
-
-                "risk": MeshNodeWrapper(
-                    "Risk Agent",
-                    risk_node,
-                    metrics,
-                    correlation_id,
-                    timeout=risk_timeout,
-                ),
-            }
-
-            # ============================================================
-            # 3. CONNECT EVERY AGENT TO EVERY PEER
-            # ============================================================
-
-            all_nodes = [
-                web_search_node,
-                market_node,
-                customer_node,
-                competitor_node,
-                comparison_node,
-                risk_node,
-            ]
-
+            wrapped_peers, all_nodes = self._initialize_mesh(shared_context, metrics, correlation_id)
+            
+            # Connect all nodes
             for node in all_nodes:
                 node.connect_peers(wrapped_peers)
 
-            logger.info(
-                f"[{correlation_id}] "
-                f"Fully connected P2P mesh initialized with "
-                f"{len(all_nodes)} agents."
-            )
+            logger.info(f"[{correlation_id}] Fully connected P2P mesh initialized with {len(all_nodes)} agents.")
 
-            # ============================================================
-            # 4. WEB SEARCH
-            # ============================================================
+            agent_outputs = await self._execute_mesh(wrapped_peers, correlation_id)
+            
+            # Update shared context with outputs
+            self._update_shared_context(shared_context, agent_outputs)
 
-            logger.info(
-                f"[{correlation_id}] "
-                f"Awaiting Web Search Agent..."
-            )
-
-            web_search_data = await wrapped_peers[
-                "web_search"
-            ].get_analysis()
-
-            has_categories = (
-                isinstance(web_search_data, dict)
-                and any(
-                    isinstance(value, list) and len(value) > 0
-                    for value in web_search_data.values()
-                )
-            )
-
-            if not has_categories:
-                logger.warning(
-                    f"[{correlation_id}] "
-                    f"Web Search Agent returned empty or invalid data. "
-                    f"Continuing downstream mesh."
-                )
-
-            # ============================================================
-            # 5. TRIGGER COMPARISON AGENT
-            # ============================================================
-
-            logger.info(
-                f"[{correlation_id}] "
-                f"Triggering Comparison Agent..."
-            )
-
-            comparison_result = await wrapped_peers[
-                "comparison"
-            ].get_analysis()
-
-            # ============================================================
-            # 6. TRIGGER RISK AGENT
-            # ============================================================
-
-            logger.info(
-                f"[{correlation_id}] "
-                f"Triggering Risk Agent..."
-            )
-
-            risk_data = await wrapped_peers[
-                "risk"
-            ].get_analysis()
-
-            # ============================================================
-            # 7. READ SHARED CONTEXT
-            # ============================================================
-
-            market_raw = shared_context.get(
-                "market_analysis",
-                {},
-            )
-
-            competitor_raw = shared_context.get(
-                "competitor_analysis",
-                {},
-            )
-
-            customer_raw = shared_context.get(
-                "customer_analysis",
-                {},
-            )
-
-            comparison_raw = shared_context.get(
-                "comparison_analysis",
-                {},
-            )
-
-            risk_raw = shared_context.get(
-                "risk_analysis",
-                {},
-            )
-
-            # Preserve returned values if an agent returns its analysis
-            # without writing it into shared_context.
-            if not comparison_raw and comparison_result:
-                comparison_raw = comparison_result
-
-            if not risk_raw and risk_data:
-                risk_raw = risk_data
-
-            # ============================================================
-            # 8. APPLY AGENT OUTPUT GUARDRAILS
-            # ============================================================
-
-            if request_id:
-                await ProgressManager.publish(
-                    request_id,
-                    "Guardrails",
-                    "running",
-                    "Applying evidence guardrails and hallucination checks...",
-                )
-
-            market_data = GuardrailManager.validate_agent_output(
-                "Market Agent",
-                market_raw,
-                [
-                    "market_size",
-                    "growth_rate",
-                    "market_trends",
-                ],
-            )
-
-            competitor_data = GuardrailManager.validate_agent_output(
-                "Competitor Agent",
-                competitor_raw,
-                [
-                    "competitors",
-                ],
-            )
-
-            customer_data = GuardrailManager.validate_agent_output(
-                "Customer Agent",
-                customer_raw,
-                [
-                    "target_customer_segments",
-                    "pain_points",
-                ],
-            )
-
-            comparison_data = GuardrailManager.validate_agent_output(
-                "Comparison Agent",
-                comparison_raw,
-                [
-                    "feature_comparison",
-                ],
-            )
-
-            # ============================================================
-            # RISK DATA
-            # ============================================================
-
-            # RiskAgent owns its own output schema, so we preserve its
-            # validated result rather than inventing required fields
-            # here.
-            risk_data = risk_raw
-
-            # ============================================================
-            # 9. FACT / HALLUCINATION VERIFICATION
-            # ============================================================
-
-            market_data = (
-                GuardrailManager.verify_facts_and_hallucinations(
-                    "Market Agent",
-                    market_data,
-                    web_search_data,
-                )
-            )
-
-            competitor_data = (
-                GuardrailManager.verify_facts_and_hallucinations(
-                    "Competitor Agent",
-                    competitor_data,
-                    web_search_data,
-                )
-            )
-
-            if request_id:
-                await ProgressManager.publish(
-                    request_id,
-                    "Guardrails",
-                    "completed",
-                    "Guardrail verification passed.",
-                )
-
-                await ProgressManager.publish(
-                    request_id,
-                    "Report Generator",
-                    "running",
-                    "Preparing Executive Report...",
-                )
-
-            # ============================================================
-            # 10. DETERMINE OVERALL STATUS
-            # ============================================================
-
-            critical_agents = [
-                "Web Search Agent",
-                "Comparison Agent",
-                "Risk Agent",
-            ]
-
-            optional_agents = [
-                "Market Agent",
-                "Customer Agent",
-                "Competitor Agent",
-            ]
-
-            overall_status = "success"
-
-            # Critical agents failing means overall validation failed.
-            for agent_name in critical_agents:
-                agent_metric = metrics.get(
-                    agent_name,
-                    {},
-                )
-
-                if agent_metric.get("status") in [
-                    "failed",
-                    "timeout",
-                ]:
-                    overall_status = "failed"
-                    break
-
-            # Optional agent failure produces partial success.
-            if overall_status != "failed":
-                for agent_name in optional_agents:
-                    agent_metric = metrics.get(
-                        agent_name,
-                        {},
-                    )
-
-                    if agent_metric.get("status") in [
-                        "failed",
-                        "timeout",
-                    ]:
-                        overall_status = "partial_success"
-                        break
-
-            logger.info(
-                f"[{correlation_id}] "
-                f"Final orchestration status: "
-                f"{overall_status}"
-            )
-
-            # ============================================================
-            # 11. BUILD FINAL RESPONSE
-            # ============================================================
-
-            execution_time = time.time() - start_time
-
-            raw_response = {
-                "metadata": {
-                    "startup_idea": startup_idea,
-                    "correlation_id": correlation_id,
-                    "execution_time_seconds": round(
-                        execution_time,
-                        2,
-                    ),
-                    "status": overall_status,
-                    "agent_metrics": metrics,
-                },
-
-                "web_search_agent": {
-                    "search_results": web_search_data,
-                },
-
-                "market_agent": market_data,
-
-                "competitor_agent": competitor_data,
-
-                "customer_agent": customer_data,
-
-                "comparison_agent": comparison_data,
-
-                # ========================================================
-                # RISK AGENT OUTPUT
-                # ========================================================
-
-                "risk_agent": risk_data,
-
-                # Keep a clearly named risk_analysis field as well so
-                # downstream consumers can access it directly.
-                "risk_analysis": risk_data,
-
-                "final_evaluation": {
-                    "comparison": comparison_data,
-                    "risk": risk_data,
-                },
-            }
-
-            # ============================================================
-            # 12. FINAL RESPONSE GUARDRAIL
-            # ============================================================
-
-            final_report = (
-                GuardrailManager.verify_final_response(
-                    raw_response
-                )
-            )
-
-            if request_id:
-                await ProgressManager.publish(
-                    request_id,
-                    "Orchestrator",
-                    "completed",
-                    "Validation pipeline finished.",
-                )
-
-            logger.info(
-                f"[{correlation_id}] "
-                f"P2P Mesh Network completed successfully "
-                f"in {execution_time:.2f}s."
+            final_data = self._apply_guardrails(request_id, shared_context, agent_outputs, correlation_id)
+            
+            overall_status = self._determine_status(metrics, correlation_id)
+            
+            final_report = self._build_final_response(
+                startup_idea, correlation_id, start_time, overall_status, metrics, agent_outputs, final_data, request_id
             )
 
             return final_report
-
-        # ================================================================
-        # ERROR HANDLING
-        # ================================================================
-
-        except PayloadIntegrityError as exc:
-            logger.error(
-                f"[{correlation_id}] "
-                f"Critical Payload Integrity Error: {exc}"
-            )
-
-            return self._format_error_response(
-                startup_idea,
-                correlation_id,
-                start_time,
-                str(exc),
-                metrics,
-            )
 
         except Exception as exc:
             logger.exception(
                 f"[{correlation_id}] "
                 f"P2P Mesh Network failed unexpectedly "
-                f"for idea: '{startup_idea}'"
+                f"for idea of length: {len(startup_idea)}"
+            )
+            return self._format_error_response(
+                startup_idea, correlation_id, start_time,
+                "An unexpected error occurred during startup validation.", metrics
             )
 
-            return self._format_error_response(
-                startup_idea,
-                correlation_id,
-                start_time,
-                "An unexpected error occurred during startup validation.",
-                metrics,
-            )
+    def _build_shared_context(self, startup_idea: str, correlation_id: str, request_id: str) -> dict:
+        return {
+            "idea": {"description": startup_idea, "proposed_features": []},
+            "correlation_id": correlation_id,
+            "request_id": request_id,
+            "research": {},
+            "market_analysis": {}, "customer_analysis": {}, "competitor_analysis": {},
+            "comparison_analysis": {}, "risk_analysis": {}, "swot_analysis": {},
+            "mvp_analysis": {}, "gtm_analysis": {}, "startup_score_analysis": {},
+        }
+
+    def _initialize_mesh(self, shared_context: dict, metrics: dict, correlation_id: str):
+        query_strategist = QueryStrategist(llm_client=self.llm_client)
+        raw_nodes = {
+            "web_search": WebSearchAgent(query_strategist, self.search_service, self.result_processor, shared_context=shared_context),
+            "market": MarketOpportunityAgent(shared_context),
+            "customer": CustomerAgent(shared_context),
+            "competitor": CompetitorAgent(shared_context),
+            "comparison": ComparisonAgent(shared_context, llm_client=self.llm_client),
+            "risk": RiskAgent(shared_context, llm_client=self.llm_client),
+            "swot": SWOTAgent(shared_context, llm_client=self.llm_client),
+            "mvp": MVPAgent(shared_context, llm_client=self.llm_client),
+            "gtm": GTMAgent(shared_context, llm_client=self.llm_client),
+            "startup_score": StartupScoreAgent(shared_context, llm_client=self.llm_client),
+        }
+        
+        wrapped_peers = {}
+        for key, node_instance in raw_nodes.items():
+            config = AGENT_REGISTRY.get(key)
+            if config:
+                wrapped_peers[key] = MeshNodeWrapper(config.name, node_instance, metrics, correlation_id, timeout=config.timeout)
+                
+        return wrapped_peers, list(raw_nodes.values())
+
+    async def _execute_mesh(self, wrapped_peers: dict, correlation_id: str) -> dict:
+        # Calculate execution tiers based on dependencies for concurrent execution
+        tiers = []
+        resolved = set()
+        pending = set(AGENT_REGISTRY.keys())
+        
+        while pending:
+            current_tier = []
+            for key in pending:
+                if all(dep in resolved for dep in AGENT_REGISTRY[key].dependencies):
+                    current_tier.append(key)
+            if not current_tier:
+                break
+            for key in current_tier:
+                resolved.add(key)
+                pending.remove(key)
+            current_tier.sort(key=lambda k: AGENT_REGISTRY[k].execution_order)
+            tiers.append(current_tier)
+
+        agent_outputs = {}
+        for tier in tiers:
+            logger.info(f"[{correlation_id}] Triggering concurrent tier: {tier}")
+            tasks = [wrapped_peers[key].get_analysis() for key in tier]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            for key, result in zip(tier, results):
+                if isinstance(result, Exception):
+                    logger.error(f"[{correlation_id}] Agent {key} raised an exception in mesh: {type(result).__name__}")
+                    agent_outputs[key] = {}
+                else:
+                    agent_outputs[key] = result
+                    
+                if key == "web_search":
+                    has_categories = isinstance(result, dict) and any(isinstance(v, list) and len(v) > 0 for v in result.values())
+                    if not has_categories:
+                        logger.warning(f"[{correlation_id}] Web Search Agent returned empty or invalid data. Continuing downstream mesh.")
+        return agent_outputs
+
+    def _update_shared_context(self, shared_context: dict, agent_outputs: dict):
+        mapping = {
+            "comparison": "comparison_analysis",
+            "market": "market_analysis",
+            "customer": "customer_analysis",
+            "competitor": "competitor_analysis",
+            "risk": "risk_analysis",
+            "swot": "swot_analysis",
+            "mvp": "mvp_analysis",
+            "gtm": "gtm_analysis",
+            "startup_score": "startup_score_analysis",
+        }
+        
+        model_mapping = {
+            "market": MarketAnalysis,
+            "customer": CustomerAnalysis,
+            "competitor": CompetitorAnalysis,
+            "risk": RiskAnalysis,
+            "swot": SWOTAnalysis,
+            "mvp": MVPAnalysis,
+            "gtm": GTMAnalysis,
+        }
+
+        for key, context_key in mapping.items():
+            raw_output = agent_outputs.get(key)
+            if not shared_context.get(context_key) and raw_output:
+                # Validate output schema via Pydantic if a model exists
+                if key in model_mapping and isinstance(raw_output, dict):
+                    try:
+                        model_mapping[key](**raw_output)
+                        # Avoid model_dump() memory duplication; store by reference
+                        shared_context[context_key] = raw_output
+                    except Exception as e:
+                        logger.error(f"Schema validation failed for {key}: {type(e).__name__}. Falling back to raw dictionary.")
+                        shared_context[context_key] = raw_output
+                else:
+                    shared_context[context_key] = raw_output
+
+    def _apply_guardrails(self, request_id: str, shared_context: dict, agent_outputs: dict, correlation_id: str) -> dict:
+        if request_id:
+            self._safe_publish(request_id, "Guardrails", "running", "Applying evidence guardrails and hallucination checks...")
+            
+        web_search_data = agent_outputs.get("web_search", {})
+        
+        data = {}
+        fields_map = {
+            "market": ("Market Agent", "market_analysis", ["market_size", "growth_rate", "market_trends"]),
+            "competitor": ("Competitor Agent", "competitor_analysis", ["competitors"]),
+            "customer": ("Customer Agent", "customer_analysis", ["target_customer_segments", "pain_points"]),
+            "comparison": ("Comparison Agent", "comparison_analysis", ["feature_comparison", "executive_summary"]),
+            "risk": ("Risk Agent", "risk_analysis", ["risks", "top_risks", "recommendations"]),
+            "swot": ("SWOT Agent", "swot_analysis", ["strengths", "weaknesses", "opportunities", "threats"]),
+            "mvp": ("MVP Agent", "mvp_analysis", ["core_features", "optional_features", "future_features", "mvp_scope"]),
+            "gtm": ("GTM Agent", "gtm_analysis", ["target_segment", "acquisition_channels", "pricing_strategy", "launch_plan"]),
+            "startup_score": ("Startup Score Agent", "startup_score_analysis", ["overall_score", "verdict", "confidence_level"])
+        }
+        
+        # 1. Validate formats
+        for key, (name, ctx_key, req_fields) in fields_map.items():
+            data[key] = GuardrailManager.validate_agent_output(name, shared_context.get(ctx_key, {}), req_fields)
+            
+        # 2. Fact checking
+        verify_keys = ["market", "competitor", "risk", "swot", "mvp", "gtm", "startup_score"]
+        for key in verify_keys:
+            name = fields_map[key][0]
+            data[key] = GuardrailManager.verify_facts_and_hallucinations(name, data[key], web_search_data)
+            
+        if request_id:
+            self._safe_publish(request_id, "Guardrails", "completed", "Guardrail verification passed.")
+            self._safe_publish(request_id, "Report Generator", "running", "Preparing Executive Report...")
+            
+        return data
+
+    def _determine_status(self, metrics: dict, correlation_id: str) -> str:
+        critical_agents = [cfg.name for cfg in AGENT_REGISTRY.values() if cfg.is_critical]
+        optional_agents = [cfg.name for cfg in AGENT_REGISTRY.values() if not cfg.is_critical]
+        
+        overall_status = "success"
+        for agent_name in critical_agents:
+            if metrics.get(agent_name, {}).get("status") in ["failed", "timeout"]:
+                return "failed"
+                
+        for agent_name in optional_agents:
+            if metrics.get(agent_name, {}).get("status") in ["failed", "timeout"]:
+                overall_status = "partial_success"
+                break
+                
+        logger.info(f"[{correlation_id}] Final orchestration status: {overall_status}")
+        return overall_status
+
+    def _build_final_response(self, startup_idea: str, correlation_id: str, start_time: float, status: str, metrics: dict, agent_outputs: dict, final_data: dict, request_id: str) -> dict:
+        execution_time = time.time() - start_time
+        
+        raw_response = {
+            "metadata": {
+                "startup_idea": startup_idea, # Keep in JSON payload, but not logs
+                "correlation_id": correlation_id,
+                "execution_time_seconds": round(execution_time, 2),
+                "status": status,
+                "agent_metrics": metrics,
+            },
+            "executive_summary": final_data.get("comparison", {}).get("executive_summary", {}),
+            "web_search_agent": {"search_results": agent_outputs.get("web_search", {})},
+            "market_agent": final_data.get("market", {}),
+            "competitor_agent": final_data.get("competitor", {}),
+            "customer_agent": final_data.get("customer", {}),
+            "comparison_agent": final_data.get("comparison", {}),
+            "swot_agent": final_data.get("swot", {}),
+            "mvp_agent": final_data.get("mvp", {}),
+            "gtm_agent": final_data.get("gtm", {}),
+            "startup_score_agent": final_data.get("startup_score", {}),
+            "risk_agent": final_data.get("risk", {}),
+            "risk_analysis": final_data.get("risk", {}),
+            "final_evaluation": {
+                "executive_summary": final_data.get("comparison", {}).get("executive_summary", {}),
+                "comparison": final_data.get("comparison", {}),
+                "risk": final_data.get("risk", {}),
+                "swot": final_data.get("swot", {}),
+                "mvp": final_data.get("mvp", {}),
+                "gtm": final_data.get("gtm", {}),
+                "startup_score": final_data.get("startup_score", {}),
+            },
+        }
+
+        final_report = GuardrailManager.verify_final_response(raw_response)
+        
+        if request_id:
+            self._safe_publish(request_id, "Orchestrator", "completed", "Validation pipeline finished.")
+            
+        logger.info(
+            f"[{correlation_id}] Orchestration metrics: "
+            f"status={status} | duration={execution_time:.2f}s | "
+            f"idea_length={len(startup_idea)}"
+        )
+        return final_report
 
     def _format_error_response(
         self,
@@ -778,16 +531,11 @@ class StartupValidatorOrchestrator:
         error_msg: str,
         metrics: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Return a consistent error payload."""
-
         return {
             "metadata": {
                 "startup_idea": startup_idea,
                 "correlation_id": correlation_id,
-                "execution_time_seconds": round(
-                    time.time() - start_time,
-                    2,
-                ),
+                "execution_time_seconds": round(time.time() - start_time, 2),
                 "status": "failed",
                 "agent_metrics": metrics,
             },

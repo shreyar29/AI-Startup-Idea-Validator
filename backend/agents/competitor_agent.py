@@ -59,7 +59,6 @@ class CompetitorAgent:
             if self._analysis_task.done():
                 try:
                     self._analysis_task.result()
-                    # Task completed without throwing, but if it was degraded, reset it for future-proofing
                     if self.status in ["failed", "timeout"]:
                         logger.warning("CompetitorAgent: Previous task completed in degraded state. Resetting task.")
                         self._analysis_task = None
@@ -125,6 +124,7 @@ class CompetitorAgent:
     def _return_degraded(self, reason: str, confidence: str):
         analysis = {
             "competitors": [],
+            "competitor_gaps": [f"Analysis could not be completed: {reason}"],
             "gap_analysis": [f"Analysis could not be completed: {reason}"],
             "confidence": confidence,
             "no_competitor_data_found": True,
@@ -185,7 +185,7 @@ class CompetitorAgent:
 
         if not competitor_snippets:
             logger.warning(f"{log_prefix} No research data snippets found. Degrading gracefully.")
-            return self._return_degraded("No valid research snippets found in context.", "Medium")
+            return self._return_degraded("No valid research snippets found in context.", "Low")
             
         logger.info(f"{log_prefix} Consolidated {len(competitor_snippets)} unique snippets.")
 
@@ -244,9 +244,13 @@ class CompetitorAgent:
                 continue
                 
             pricing = "Unknown"
-            price_match = re.search(r'\$\d+(?:\.\d+)?(?:\/mo|\/year|\/month)?|free|pricing|subscription', content, re.IGNORECASE)
+            price_match = re.search(r'(\$\d+(?:\.\d+)?(?:\/(?:mo|year|month))?)', content, re.IGNORECASE)
             if price_match:
-                pricing = "See Website"
+                pricing = price_match.group(1)
+            elif re.search(r'\b(free|freemium)\b', content, re.IGNORECASE):
+                pricing = "Free/Freemium"
+            elif re.search(r'\b(custom pricing|contact us|enterprise plan)\b', content, re.IGNORECASE):
+                pricing = "Custom/Enterprise"
                 
             features = []
             strengths = []
@@ -307,7 +311,6 @@ class CompetitorAgent:
                 continue
             name = str(comp.get("name") or "").strip()
             
-            # Eliminate generic/unknown outputs
             if not name or name.lower() in ["unknown competitor", "unknown", "n/a", "none"]:
                 comps_rejected += 1
                 continue
@@ -322,7 +325,6 @@ class CompetitorAgent:
             business_model = str(comp.get("business_model") or "Unavailable")
 
             if name_lower in competitor_map:
-                # Merge duplicate
                 existing = competitor_map[name_lower]
                 existing["features"] = list(dict.fromkeys(existing["features"] + features))
                 existing["source_references"] = list(dict.fromkeys(existing["source_references"] + source_references))
@@ -339,52 +341,72 @@ class CompetitorAgent:
                 comps_merged += 1
                 continue
                 
-            # Generate summary in Python
             summary = f"Provides {', '.join(features[:3])}." if features else "Product details unknown."
             
-            # Confidence for this competitor (used for overall confidence calculation later)
             has_sources = len(source_references) > 0
             comp_confidence = "High" if has_sources else "Medium"
             
-            # Create new competitor with required schema
+            positioning = f"Positioned as a {business_model} solution targeting {target_customers[:50]}."
+            if features: positioning += f" Core focus on {features[0][:30]}."
+            
             valid_comp = {
                 "name": name,
                 "product_summary": summary,
                 "features": features,
                 "pricing": pricing,
                 "business_model": business_model,
-                "market_positioning": "Unknown",
+                "market_positioning": positioning,
                 "target_customers": target_customers,
                 "strengths": strengths,
                 "weaknesses": weaknesses,
                 "source_references": source_references,
-                "confidence_score": comp_confidence
+                "confidence_score": comp_confidence,
+                "threat_score": 0,
+                "rank": 0
             }
             competitor_map[name_lower] = valid_comp
             validated_competitors.append(valid_comp)
         
+        # Threat Score & Ranking
+        for comp in validated_competitors:
+            overlap = len(comp["features"]) * 5 + len(comp["strengths"]) * 3
+            if len(comp["source_references"]) > 1: overlap += 15
+            if comp["business_model"] != "Unavailable": overlap += 10
+            if comp["pricing"] != "Unknown": overlap += 10
+            
+            # Additional penalty if it targets similar audience based on 'idea'
+            idea_words = set(idea.lower().split())
+            audience_words = set(comp["target_customers"].lower().split())
+            if idea_words.intersection(audience_words):
+                overlap += 10
+                
+            comp["threat_score"] = min(100, max(0, overlap))
+            
+        validated_competitors.sort(key=lambda x: x["threat_score"], reverse=True)
+        for i, comp in enumerate(validated_competitors):
+            comp["rank"] = i + 1
+            
         logger.info(f"{log_prefix} Processing Stats: Discovered={comps_discovered}, Rejected={comps_rejected}, Merged={comps_merged}, Final Valid={len(validated_competitors)}")
 
-        # Gap analysis generated entirely in Python
         raw_gap_analysis = self._generate_gap_analysis(validated_competitors)
 
-        # Calculate confidence score logically to save LLM tokens
+        # Evidence-Quality based Confidence
+        total_sources = sum(len(c["source_references"]) for c in validated_competitors)
+        multi_source_competitors = sum(1 for c in validated_competitors if len(c["source_references"]) > 1)
+        
         if not validated_competitors:
             overall_confidence = "Low"
+        elif total_sources >= 5 and multi_source_competitors >= 1:
+            overall_confidence = "High"
+        elif total_sources >= 2:
+            overall_confidence = "Medium"
         else:
-            all_have_sources = all(c["source_references"] for c in validated_competitors)
-            missing_fields = sum(1 for c in validated_competitors if not c["features"] or c["pricing"] in ["Unknown", "Unavailable"])
-            
-            if all_have_sources and missing_fields == 0:
-                overall_confidence = "High"
-            elif missing_fields <= 2:
-                overall_confidence = "Medium"
-            else:
-                overall_confidence = "Low"
+            overall_confidence = "Low"
 
         self.status = "success"
         analysis = {
             "competitors": validated_competitors,
+            "competitor_gaps": self._validate_and_coerce_list(raw_gap_analysis),
             "gap_analysis": self._validate_and_coerce_list(raw_gap_analysis),
             "confidence": overall_confidence,
             "no_competitor_data_found": len(validated_competitors) == 0,
@@ -392,10 +414,6 @@ class CompetitorAgent:
             "status": self.status,
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
-
-        logger.debug(f"--- COMPETITOR AGENT COMPLETE PAYLOAD ---")
-        logger.debug(json.dumps(analysis, indent=2))
-        logger.debug("-----------------------------------------")
 
         logger.info("CompetitorAgent: Successful completion. Output ready for downstream agents.")
         self.context["competitor_analysis"] = analysis
@@ -406,10 +424,17 @@ class CompetitorAgent:
             return ["No competitor data available for gap analysis."]
         
         all_features = {}
+        all_pricing = []
+        all_audience = []
+        
         for c in competitors:
             for f in c.get("features", []):
                 feat = str(f).lower().strip()
                 all_features[feat] = all_features.get(feat, 0) + 1
+            if c.get("pricing") not in ["Unknown", "Pricing unavailable", ""]:
+                all_pricing.append(c["pricing"].lower())
+            if c.get("target_customers") not in ["Unknown", "Unavailable", ""]:
+                all_audience.append(c["target_customers"])
                 
         if not all_features:
             return ["No competitor features found to identify gaps."]
@@ -421,6 +446,12 @@ class CompetitorAgent:
         if common_features:
             gaps.append(f"Most competitors focus on: {', '.join(common_features[:3])}.")
         if rare_features:
-            gaps.append(f"Few competitors provide: {', '.join(rare_features[:3])}.")
+            gaps.append(f"Opportunity Space: Few competitors provide: {', '.join(rare_features[:3])}.")
             
-        return gaps if gaps else ["No distinct feature gaps identified."]
+        free_tier = any("free" in p for p in all_pricing)
+        if all_pricing and not free_tier:
+            gaps.append("Pricing Gap: No major competitor offers a Free/Freemium tier.")
+        elif all_pricing and free_tier:
+            gaps.append("Pricing Threat: Existing free/freemium options dominate entry-level.")
+            
+        return gaps if gaps else ["No distinct competitive gaps identified."]

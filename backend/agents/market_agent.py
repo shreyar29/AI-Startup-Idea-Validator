@@ -82,8 +82,8 @@ class MarketOpportunityAgent:
                 logger.info(f"{log_prefix} Successfully received research payload.")
                 
             result = await self.analyze(log_prefix)
+    
             self.status = "success"
-            
             duration = time.perf_counter() - start_time
             logger.info(f"{log_prefix} Completed successfully in {duration:.2f}s.")
             return result
@@ -132,9 +132,12 @@ class MarketOpportunityAgent:
             "industry_insights": [],
             "market_summary": f"Analysis could not be completed: {reason}",
             "confidence_score": confidence,
+            "market_timing": "Data unavailable",
+            "opportunity_score": 0,
             "status": self.status,
             "failure_reason": reason,
-            "generated_at": datetime.now(timezone.utc).isoformat()
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "evidence": []
         }
         self.context["market_analysis"] = analysis
         return analysis
@@ -163,6 +166,8 @@ class MarketOpportunityAgent:
 
         snippets = []
         seen_hashes = set()
+        current_year = datetime.now().year
+        year_pattern = re.compile(r'\b(20\d{2})\b')
 
         for cat, results in research.items():
             if not isinstance(results, list):
@@ -186,14 +191,27 @@ class MarketOpportunityAgent:
                     
                     # Boost authority
                     is_authoritative = any(d in url.lower() for d in auth_domains)
-                    score = relevance + (5 if is_authoritative else 0)
+                    
+                    # Freshness
+                    years = [int(y) for y in year_pattern.findall(content) if 2010 <= int(y) <= current_year + 5]
+                    freshness_score = 0
+                    if years:
+                        max_year = max(years)
+                        if max_year >= current_year: freshness_score = 10
+                        elif max_year >= current_year - 2: freshness_score = 7
+                        elif max_year >= current_year - 5: freshness_score = 4
+                        
+                    score = relevance + (5 if is_authoritative else 0) + (freshness_score / 2)
                     
                     snippets.append({
                         "category": cat,
                         "url": url,
                         "content": content,
                         "score": score,
-                        "length": len(content)
+                        "length": len(content),
+                        "authority_score": 10 if is_authoritative else 2,
+                        "relevance_score": relevance,
+                        "freshness_score": freshness_score
                     })
 
         if not snippets:
@@ -212,14 +230,26 @@ class MarketOpportunityAgent:
             "market_trends": [],
             "drivers": [],
             "risks": [],
-            "regulations": []
+            "regulations": [],
+            "segmentation": []
         }
         
         size_pattern = re.compile(r'\$?\d+(?:\.\d+)?\s*(?:billion|million|trillion|B|M|T)', re.IGNORECASE)
         cagr_pattern = re.compile(r'(?:cagr\s*(?:of)?\s*)?(\d+(?:\.\d+)?%|\d+(?:\.\d+)?\s*percent)', re.IGNORECASE)
         
+        structured_evidence = []
+        
         for s in top_snippets:
             content = s.get('content', '')
+            url = s.get('url', '')
+            
+            structured_evidence.append({
+                "url": url,
+                "authority_score": s["authority_score"],
+                "category": s["category"],
+                "relevance_score": s["relevance_score"],
+                "freshness_score": s["freshness_score"]
+            })
             
             sentences = [sen.strip() for sen in content.split('.') if sen.strip()]
             
@@ -266,6 +296,10 @@ class MarketOpportunityAgent:
                 if any(kw in sen_lower for kw in ["regulation", "compliance", "law", "policy", "legal"]):
                     if clean_sen not in parsed_analysis["regulations"] and len(sen) > 10:
                         parsed_analysis["regulations"].append(clean_sen)
+                if any(kw in sen_lower for kw in ["segment", "demographic", "audience", "adoption by"]):
+                    if clean_sen not in parsed_analysis["segmentation"] and len(sen) > 10:
+                        parsed_analysis["segmentation"].append(clean_sen)
+                        
         if parsed_analysis["market_maturity"] == "Insufficient verified evidence.":
             parsed_analysis["market_maturity"] = "Growing"
             
@@ -273,6 +307,7 @@ class MarketOpportunityAgent:
         parsed_analysis["drivers"] = parsed_analysis["drivers"][:5]
         parsed_analysis["risks"] = parsed_analysis["risks"][:5]
         parsed_analysis["regulations"] = parsed_analysis["regulations"][:5]
+        parsed_analysis["segmentation"] = parsed_analysis["segmentation"][:4]
         logger.info(f"{log_prefix} Extracted market analysis using deterministic python logic.")
 
         logger.info(f"{log_prefix} Validating and structuring response generation.")
@@ -285,33 +320,64 @@ class MarketOpportunityAgent:
         growth_drivers = self._dedupe_list(parsed_analysis.get("drivers"))
         risks = self._dedupe_list(parsed_analysis.get("risks"))
         regulations = self._dedupe_list(parsed_analysis.get("regulations"))
+        market_segmentation = self._dedupe_list(parsed_analysis.get("segmentation"))
         
-        evidence = [s["url"] for s in top_snippets]
-
-        trends_str = ", ".join(market_trends[:3]) if market_trends else "none identified"
-        market_summary = f"The market appears to be growing with a CAGR of {growth_rate}. The identified maturity level is {market_maturity}. Key trends include {trends_str}."
-
-        opportunities = []
+        opportunities = list(set([t for t in market_trends] + [d for d in growth_drivers]))[:5]
         challenges = risks
-        market_segmentation = []
         industry_insights = regulations
 
-        # Calculate confidence score logically to save LLM tokens
-        unknowns = sum(1 for v in [market_size, growth_rate, market_maturity] if v == "Insufficient verified evidence.")
-        if not market_trends:
-            unknowns += 1
-            
-        if len(evidence) == 0:
-            confidence = "Low"
-        elif unknowns == 0 and len(evidence) >= 2:
+        # Calculate evidence-quality based confidence score
+        completeness = sum(1 for v in [market_size, growth_rate, market_maturity] if v != "Insufficient verified evidence.")
+        completeness += 1 if market_trends else 0
+        completeness += 1 if growth_drivers else 0
+        
+        evidence_count = len(structured_evidence)
+        auth_count = sum(1 for e in structured_evidence if e["authority_score"] >= 10)
+        
+        total_confidence_points = (completeness * 10) + (evidence_count * 2) + (auth_count * 5)
+        
+        if total_confidence_points >= 50:
             confidence = "High"
-        elif unknowns <= 2 and len(evidence) > 0:
+        elif total_confidence_points >= 25:
             confidence = "Medium"
         else:
             confidence = "Low"
 
-        # Ensure all required keys exist and enforce rigid typing to prevent downstream crashes
-        self.status = "success"
+        # Calculate opportunity score (0-100)
+        opportunity_score = 30
+        opportunity_score += len(opportunities) * 6
+        opportunity_score -= len(challenges) * 4
+        
+        if growth_rate != "Insufficient verified evidence.":
+            try:
+                gr_match = re.search(r'(\d+(?:\.\d+)?)', growth_rate)
+                if gr_match:
+                    gr_val = float(gr_match.group(1))
+                    if gr_val >= 15: opportunity_score += 25
+                    elif gr_val >= 5: opportunity_score += 15
+                    else: opportunity_score += 5
+            except Exception:
+                pass
+                
+        if market_maturity == "Growing": opportunity_score += 15
+        elif market_maturity == "Emerging": opportunity_score += 20
+        elif market_maturity == "Mature": opportunity_score -= 5
+        
+        opportunity_score = max(0, min(100, int(opportunity_score)))
+
+        # Dynamic Market Summary
+        summary_parts = []
+        if market_size != "Insufficient verified evidence.":
+            summary_parts.append(f"The market size is currently estimated at {market_size}.")
+        if growth_rate != "Insufficient verified evidence.":
+            summary_parts.append(f"It is experiencing a growth rate of {growth_rate}.")
+        summary_parts.append(f"The overall market maturity is assessed as '{market_maturity}'.")
+        
+        if opportunities:
+            summary_parts.append(f"Key identified opportunities include {', '.join(opportunities[:2].copy())}.")
+        
+        market_summary = " ".join(summary_parts) if summary_parts else "Market intelligence could not be definitively summarized from the available data."
+
         analysis = {
             "market_size": market_size,
             "growth_rate": growth_rate,
@@ -323,10 +389,12 @@ class MarketOpportunityAgent:
             "challenges": challenges,
             "industry_insights": industry_insights,
             "regulations": regulations,
-            "evidence": evidence,
+            "evidence": structured_evidence,
             "market_summary": market_summary,
             "confidence_score": confidence,
-            "status": self.status,
+            "market_timing": "Data unavailable",
+            "opportunity_score": opportunity_score,
+            "status": "success",
             "failure_reason": None,
             "generated_at": datetime.now(timezone.utc).isoformat()
         }
@@ -335,16 +403,11 @@ class MarketOpportunityAgent:
             "trends_extracted": len(market_trends),
             "opportunities_extracted": len(opportunities),
             "challenges_extracted": len(challenges),
-            "confidence": confidence
+            "confidence": confidence,
+            "opportunity_score": opportunity_score
         }
         logger.info(f"{log_prefix} Processing Stats: {stats}")
-
-        logger.debug(f"--- MARKET AGENT COMPLETE PAYLOAD ---")
-        logger.debug(json.dumps(analysis, indent=2))
-        logger.debug("-------------------------------------")
 
         logger.info(f"{log_prefix} Successful completion. Output ready for downstream agents.")
         self.context["market_analysis"] = analysis
         return analysis
-
-

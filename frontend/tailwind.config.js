@@ -21,6 +21,13 @@ export default {
         textMain: 'rgb(var(--color-text-main) / <alpha-value>)',
         textMuted: 'rgb(var(--color-text-muted) / <alpha-value>)',
         textDim: 'rgb(var(--color-text-dim) / <alpha-value>)',
+        vera: {
+          cyan: '#00F0FF',
+          green: '#39FF14',
+          amber: '#FFB000',
+          glass: '#0F172A',
+          shell: '#F8FAFC',
+        }
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
@@ -31,6 +38,23 @@ export default {
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'vera-hover': 'veraHover 4s ease-in-out infinite',
+        'vera-pulse': 'veraPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'vera-spin': 'veraSpin 3s linear infinite',
+      },
+      keyframes: {
+        veraHover: {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-10px)' },
+        },
+        veraPulse: {
+          '0%, 100%': { opacity: 1, transform: 'scale(1)' },
+          '50%': { opacity: .7, transform: 'scale(1.05)' },
+        },
+        veraSpin: {
+          from: { transform: 'rotate(0deg)' },
+          to: { transform: 'rotate(360deg)' },
+        }
       }
     },
   },
