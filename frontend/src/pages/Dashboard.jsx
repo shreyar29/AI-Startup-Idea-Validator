@@ -107,7 +107,7 @@ const Dashboard = () => {
   return (
     <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col md:flex-row gap-8 xl:gap-12">
       <div className="md:w-64 lg:w-72 flex-shrink-0 hidden md:block">
-        <Sidebar activeSection={activeSection} sessionId={requestId || data.metadata?.request_id} />
+        <Sidebar activeSection={activeSection} sessionId={requestId || data.metadata?.request_id} onDownload={handleExport} />
       </div>
       <div className="flex-grow space-y-12 pb-16 min-w-0">
         

@@ -19,7 +19,16 @@ const CustomerSection = ({ data }) => {
 
   // Safe data extraction
   const personas = data.customer_personas || [];
-  const primaryPersona = personas[0] || {};
+  let primaryPersona = personas[0] || {};
+  
+  // Map nested attributes if they exist
+  if (primaryPersona.inferred_attributes) {
+    primaryPersona = { ...primaryPersona, ...primaryPersona.inferred_attributes };
+  }
+  if (primaryPersona.evidence_based_attributes) {
+    primaryPersona = { ...primaryPersona, ...primaryPersona.evidence_based_attributes };
+  }
+
   const additionalPersonas = personas.slice(1);
   const unmetNeeds = data.unmet_needs || [];
   const painPoints = data.pain_points || [];
@@ -31,7 +40,7 @@ const CustomerSection = ({ data }) => {
   const safeString = (val) => {
     if (typeof val === 'string') return val;
     if (typeof val === 'object' && val !== null) {
-      return Object.values(val)[0] || String(val);
+      return val.insight || val.goal || val.feature || val.name || val.description || Object.values(val).find(v => typeof v === 'string') || String(val);
     }
     return String(val || '');
   };
@@ -46,10 +55,12 @@ const CustomerSection = ({ data }) => {
   const execSummary = `Our intelligence indicates the primary market consists of ${topSegment.toLowerCase()}. Their most critical friction point is ${topPain}, driving demand for ${topFeature}.`;
 
   // Parse buying behavior safely
-  const buyingBehaviourStr = primaryPersona.buying_behaviour && primaryPersona.buying_behaviour !== "Unknown" 
-    ? primaryPersona.buying_behaviour 
-    : "";
-  const buyingBehaviours = buyingBehaviourStr ? buyingBehaviourStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+  let buyingBehaviours = [];
+  if (Array.isArray(primaryPersona.buying_behaviour)) {
+    buyingBehaviours = primaryPersona.buying_behaviour;
+  } else if (typeof primaryPersona.buying_behaviour === 'string' && primaryPersona.buying_behaviour !== "Unknown") {
+    buyingBehaviours = primaryPersona.buying_behaviour.split(',').map(s => s.trim()).filter(Boolean);
+  }
 
   return (
     <motion.div 
@@ -184,7 +195,7 @@ const CustomerSection = ({ data }) => {
           <div className="grid grid-cols-1 gap-4">
             {buyingBehaviours.length > 0 ? buyingBehaviours.map((bb, i) => (
               <div key={i} className="glass-panel p-5 rounded-xl border-l-4 border-l-warning/70 hover:-translate-y-0.5 transition-transform shadow-sm bg-gradient-to-r from-surface to-background">
-                <p className="text-sm text-textMain font-medium leading-relaxed">{bb}</p>
+                <p className="text-sm text-textMain font-medium leading-relaxed">{safeString(bb)}</p>
               </div>
             )) : <div className="text-sm text-textDim italic px-2">Evidence insufficient. Research target demographic spending habits.</div>}
           </div>
@@ -198,7 +209,7 @@ const CustomerSection = ({ data }) => {
           <div className="grid grid-cols-1 gap-4">
             {featureDemand.length > 0 ? featureDemand.map((feat, i) => {
               const isObj = typeof feat === 'object' && feat !== null;
-              const name = isObj ? feat.feature || 'Unknown Feature' : feat;
+              const name = isObj ? feat.feature || feat.insight || 'Unknown Feature' : feat;
               const priority = isObj ? feat.priority || 'Medium' : 'Medium';
               const reason = isObj ? feat.reason || '' : '';
               

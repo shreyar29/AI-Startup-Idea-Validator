@@ -1,6 +1,7 @@
 import html
 from datetime import datetime
 from reportlab.platypus import Paragraph, Spacer, PageBreak, Table, TableStyle, HRFlowable
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib import colors
 from reportlab.graphics.shapes import Drawing

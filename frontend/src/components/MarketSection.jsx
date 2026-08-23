@@ -113,16 +113,7 @@ const MarketSection = ({ data }) => {
           </div>
         </div>
 
-        {data.market_timing && (
-          <div className="glass-panel p-6 rounded-2xl border-border/50 hover:bg-surface transition-colors flex flex-col h-auto min-h-[8rem]">
-            <div className="text-textMuted text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-blue-400"/> Market Timing
-            </div>
-            <div className="text-2xl md:text-3xl font-bold text-textMain leading-tight capitalize mt-auto line-clamp-3 break-words" title={typeof data.market_timing === 'string' ? data.market_timing : data.market_timing?.reasoning?.[0]}>
-              {typeof data.market_timing === 'string' ? data.market_timing : (data.market_timing?.status || 'Unknown')}
-            </div>
-          </div>
-        )}
+
 
         {data.opportunity_score !== undefined && (
           <div className="glass-panel p-6 rounded-2xl border-border/50 hover:bg-surface transition-colors flex flex-col h-auto min-h-[8rem]">

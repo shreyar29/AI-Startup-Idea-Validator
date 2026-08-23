@@ -7,7 +7,7 @@ const ExecutiveSummarySection = ({ summary }) => {
   const safeString = (val) => {
     if (typeof val === 'string') return val;
     if (typeof val === 'object' && val !== null) {
-      return Object.values(val)[0] || JSON.stringify(val);
+      return val.insight || val.description || val.opportunity || val.risk || val.action || val.title || val.name || Object.values(val).find(v => typeof v === 'string') || String(val);
     }
     return String(val || '');
   };

@@ -21,7 +21,7 @@ const OverviewSection = ({ metadata, finalEval }) => {
   
   const getOpportunityText = (opp) => {
     if (typeof opp === 'string') return opp;
-    return opp?.description || opp?.opportunity || JSON.stringify(opp);
+    return opp?.insight || opp?.description || opp?.opportunity || opp?.title || (opp && Object.values(opp).find(v => typeof v === 'string')) || String(opp);
   };
 
   const biggestOpportunity = Array.isArray(swot.opportunities) && swot.opportunities.length > 0 
@@ -30,12 +30,12 @@ const OverviewSection = ({ metadata, finalEval }) => {
     
   const getRiskText = (r) => {
     if (typeof r === 'string') return r;
-    return r?.description || r?.risk || JSON.stringify(r);
+    return r?.insight || r?.description || r?.risk || r?.title || (r && Object.values(r).find(v => typeof v === 'string')) || String(r);
   };
 
   const getActionText = (a) => {
     if (typeof a === 'string') return a;
-    return a?.action || a?.description || a?.step || JSON.stringify(a);
+    return a?.insight || a?.action || a?.description || a?.step || a?.feature || a?.title || (a && Object.values(a).find(v => typeof v === 'string')) || String(a);
   };
 
   const topRisks = Array.isArray(risk.top_risks) ? risk.top_risks : (Array.isArray(risk.risks) ? risk.risks : []);

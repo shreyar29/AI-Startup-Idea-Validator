@@ -27,7 +27,6 @@ const SWOTSection = ({ data }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {categories.map((cat, i) => {
           const items = Array.isArray(data[cat.key]) ? data[cat.key] : [];
-          if (!items.length) return null;
 
           return (
             <motion.div
@@ -35,7 +34,7 @@ const SWOTSection = ({ data }) => {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: i * 0.1 }}
-              className={`glass-panel p-6 rounded-2xl border transition-all ${cat.border} hover:bg-surface/80`}
+              className={`glass-panel p-6 rounded-2xl border transition-all ${cat.border} hover:bg-surface/80 flex flex-col h-full`}
             >
               <div className="flex items-center gap-3 mb-4">
                 <div className={`p-2 rounded-lg ${cat.bg} ${cat.color}`}>
@@ -43,13 +42,43 @@ const SWOTSection = ({ data }) => {
                 </div>
                 <h3 className="text-lg font-bold text-textMain">{cat.title}</h3>
               </div>
-              <ul className="space-y-3">
-                {items.map((item, j) => (
+              <ul className="space-y-3 flex-grow">
+                {items.length > 0 ? items.map((item, j) => (
                   <li key={j} className="flex items-start gap-2 text-sm text-textMuted bg-black/20 p-3 rounded-xl shadow-inner border border-white/5">
                     <span className={`mt-0.5 font-bold ${cat.color}`}>•</span>
-                    <span className="leading-relaxed">{typeof item === 'string' ? item : item.description || JSON.stringify(item)}</span>
+                    <span className="leading-relaxed w-full">
+                      {typeof item === 'string' 
+                        ? item 
+                        : (
+                          <div className="flex flex-col gap-1.5 w-full">
+                            <div className="flex justify-between items-start gap-2 w-full">
+                              <span className="text-textMain font-medium">{item.insight || item.title || item.factor || item.name || item.description || ''}</span>
+                              {item.impact && (
+                                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border flex-shrink-0 ${
+                                  item.impact === 'Critical' ? 'bg-error/10 border-error/30 text-error' :
+                                  item.impact === 'High' ? 'bg-warning/10 border-warning/30 text-warning' :
+                                  item.impact === 'Medium' ? 'bg-primary/10 border-primary/30 text-primary' :
+                                  'bg-surface/50 border-border/50 text-textMuted'
+                                }`}>
+                                  {item.impact}
+                                </span>
+                              )}
+                            </div>
+                            {item.evidence && item.evidence.length > 0 && (
+                              <div className="text-[10px] text-textMuted mt-1 border-l-2 border-border/50 pl-2">
+                                {item.evidence.join(', ')}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      }
+                    </span>
                   </li>
-                ))}
+                )) : (
+                  <li className="flex items-center justify-center h-full text-sm text-textDim italic py-4">
+                    No {cat.title.toLowerCase()} identified.
+                  </li>
+                )}
               </ul>
             </motion.div>
           );

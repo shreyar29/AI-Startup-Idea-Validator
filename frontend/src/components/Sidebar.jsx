@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Download, Loader2 } from 'lucide-react';
 
-const Sidebar = ({ activeSection, sessionId }) => {
+const Sidebar = ({ activeSection, sessionId, onDownload }) => {
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState(null);
   const SCROLL_OFFSET_PX = 100;
@@ -28,26 +28,11 @@ const Sidebar = ({ activeSection, sessionId }) => {
   };
 
   const handleDownloadPdf = async () => {
-    if (!sessionId) return;
+    if (!onDownload) return;
     setDownloading(true);
     setError(null);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:8000')}/api/report`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId })
-      });
-      if (!res.ok) throw new Error('Failed to generate report');
-      const data = await res.json();
-      
-      const downloadUrl = `${import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:8000')}${data.download_url}`;
-      
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = 'venturelens_report.pdf';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      await onDownload();
     } catch (err) {
       console.error('Download error:', err);
       setError('PDF generation failed.');

@@ -14,10 +14,23 @@ import {
 } from 'lucide-react';
 
 const CompetitorSection = ({ data }) => {
-  const competitors = data?.competitors || [];
-  
-  if (competitors.length === 0) return null;
+  const validCompetitors = (data?.competitors || []).filter(c => {
+    if (!c || typeof c !== 'object') return false;
+    const name = c.name?.trim().toLowerCase();
+    if (!name || name === 'unknown' || name === 'unknown competitor') return false;
+    
+    // Require some minimum data to be considered valid
+    const hasData = (c.pricing && c.pricing !== "Unknown") || 
+                    (c.business_model && c.business_model !== "Unknown") || 
+                    (c.strengths && c.strengths.length > 0) || 
+                    (c.weaknesses && c.weaknesses.length > 0) || 
+                    (c.features && c.features.length > 0);
+    return hasData;
+  });
 
+  if (validCompetitors.length === 0) return null;
+
+  const competitors = validCompetitors;
   const gapAnalysis = data?.competitor_gaps || data?.gap_analysis || [];
   
   // Synthesize Executive Summary without inventing new backend fields
