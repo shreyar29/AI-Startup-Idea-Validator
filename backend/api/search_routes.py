@@ -36,15 +36,21 @@ async def run_validation_background(job_id: str, query: str, orchestrator: Start
         logger.exception(f"Background validation failed for {job_id}")
         _IN_MEMORY_JOBS[job_id] = {"status": "FAILURE", "error": str(e)}
 
+from pydantic import BaseModel, Field
+
+class ValidationRequest(BaseModel):
+    query: str = Field(..., min_length=10, max_length=1000, description="The startup idea to validate")
+
 @router.post("")
 @router.post("/")
 @limiter.limit("10/minute")
 async def start_validation(
     request: Request,
     response: Response,
-    query: str = Query(..., min_length=10, max_length=1000, description="The startup idea to validate"),
+    payload: ValidationRequest,
     orchestrator: StartupValidatorOrchestrator = Depends(get_orchestrator)
 ):
+    query = payload.query
     """
     Main endpoint for validating a startup idea.
     """

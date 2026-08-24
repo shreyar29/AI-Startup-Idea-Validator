@@ -16,8 +16,7 @@ export const validateIdea = async (idea, onStart, signal) => {
   }
 
   try {
-    const response = await api.post('/api/validation', null, {
-      params: { query: idea },
+    const response = await api.post('/api/validation', { query: idea }, {
       headers: {
         'X-Request-ID': requestId
       },

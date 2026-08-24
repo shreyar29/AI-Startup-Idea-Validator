@@ -24,17 +24,20 @@ from core.container import container
 
 # Core Mesh Routers (Always available)
 # Enterprise Architecture Routers (Optional)
+# Core API Routes
+from api.auth_routes import router as auth_router
+from api.chat_routes import router as chat_router
+from api.report_routes import router as report_router
+from api.dashboard_routes import router as dashboard_router
+from api.workspace_routes import router as workspace_router
+from api.metrics_routes import router as metrics_router
+from api.simulator_routes import router as simulator_router
+from api.search_routes import router as search_router
+from api.progress_routes import router as progress_router
+
+# Enterprise/Export API Routes
 try:
-    from api.auth_routes import router as auth_router
-    from api.chat_routes import router as chat_router
-    from api.report_routes import router as report_router
     from api.export_routes import router as export_router
-    from api.dashboard_routes import router as dashboard_router
-    from api.workspace_routes import router as workspace_router
-    from api.metrics_routes import router as metrics_router
-    from api.simulator_routes import router as simulator_router
-    from api.search_routes import router as search_router
-    from api.progress_routes import router as progress_router
     HAS_ENTERPRISE_API = True
 except ImportError as e:
     import logging
@@ -206,17 +209,19 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
+# Unconditionally mount Core APIs
+app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+app.include_router(chat_router) # prefix is defined in the router itself
+app.include_router(report_router)
+app.include_router(dashboard_router)
+app.include_router(workspace_router)
+app.include_router(metrics_router)
+app.include_router(simulator_router)
+app.include_router(search_router, tags=["search"])
+app.include_router(progress_router, tags=["progress"])
+
 if HAS_ENTERPRISE_API:
-    app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
-    app.include_router(chat_router) # prefix is defined in the router itself
-    app.include_router(report_router)
     app.include_router(export_router)
-    app.include_router(dashboard_router)
-    app.include_router(workspace_router)
-    app.include_router(metrics_router)
-    app.include_router(simulator_router)
-    app.include_router(search_router, tags=["search"])
-    app.include_router(progress_router, tags=["progress"])
 
 
 
