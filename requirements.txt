@@ -13,6 +13,7 @@ pydantic_core==2.46.4
 pydantic-settings>=2.0.0
 annotated-types==0.7.0
 annotated-doc==0.0.4
+email-validator>=2.1.0
 
 # Search API
 tavily-python==0.7.26
