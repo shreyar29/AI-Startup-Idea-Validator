@@ -13,21 +13,74 @@ const VeraWorkspace = () => {
   const location = useLocation();
   const navigate = useNavigate();
   
-  // Extract sessionId from router state or local storage (stubbed for now)
-  const sessionId = location.state?.sessionId || localStorage.getItem('active_report_id');
-  
-  const [messages, setMessages] = useState([
-    {
-      role: 'vera',
-      content: "I am Vera, your AI Co-Founder. I have loaded your entire startup validation report into my working memory. How can we improve this idea today?",
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    }
-  ]);
+  // Extract sessionId from router state
+  const [activeSessionId, setActiveSessionId] = useState(location.state?.sessionId || null);
+  const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [veraMode, setVeraMode] = useState('Founder');
+  const [sessions, setSessions] = useState([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(true);
   
   const messagesEndRef = useRef(null);
+  
+  // Fetch sessions on mount
+  useEffect(() => {
+    const fetchSessions = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/reports`, {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setSessions(data);
+          // If no active session, pick the first one
+          if (!activeSessionId && data.length > 0) {
+            setActiveSessionId(data[0].id);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch sessions", err);
+      }
+    };
+    fetchSessions();
+  }, []);
+
+  // Fetch chat history when active session changes
+  useEffect(() => {
+    const fetchHistory = async () => {
+      if (!activeSessionId) return;
+      setIsHistoryLoading(true);
+      try {
+        const historyData = await chatService.getSessionHistory(activeSessionId);
+        if (historyData.messages && historyData.messages.length > 0) {
+          const formatted = historyData.messages.map(msg => ({
+            role: msg.role,
+            content: msg.content,
+            timestamp: new Date(msg.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }));
+          setMessages(formatted);
+        } else {
+          setMessages([{
+            role: 'vera',
+            content: "I am Vera, your AI Co-Founder. I have loaded your entire startup validation report into my working memory. How can we improve this idea today?",
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }]);
+        }
+      } catch (err) {
+        console.error("Failed to load chat history", err);
+        setMessages([{
+          role: 'vera',
+          content: "I am Vera. Failed to load chat history.",
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }]);
+      } finally {
+        setIsHistoryLoading(false);
+      }
+    };
+    fetchHistory();
+  }, [activeSessionId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -36,7 +89,7 @@ const VeraWorkspace = () => {
   const handleSubmit = async (e, forcedInput = null) => {
     if (e) e.preventDefault();
     const query = forcedInput || input;
-    if (!query.trim() || loading || !sessionId) return;
+    if (!query.trim() || loading || !activeSessionId) return;
     
     setInput('');
     const userTimestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -54,7 +107,7 @@ const VeraWorkspace = () => {
     
     try {
       await chatService.streamMessage(
-        sessionId, 
+        activeSessionId, 
         query, 
         'overview',
         veraMode,
@@ -91,9 +144,9 @@ const VeraWorkspace = () => {
   };
 
   const handleNewSession = async () => {
-    if (!sessionId) return;
+    if (!activeSessionId) return;
     try {
-      await chatService.clearSession(sessionId);
+      await chatService.clearSession(activeSessionId);
       setMessages([{
         role: 'vera',
         content: "I am Vera, your AI Co-Founder. I have cleared my memory for this report. Let's start a fresh strategic session. How can we improve this idea today?",
@@ -104,9 +157,9 @@ const VeraWorkspace = () => {
     }
   };
 
-  if (!sessionId) {
+  if (!activeSessionId && sessions.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[80vh] p-8">
+      <div className="flex flex-col items-center justify-center min-h-[80vh] p-8 bg-background">
         <ShieldAlert className="w-16 h-16 text-red-500 mb-4" />
         <h2 className="text-2xl font-bold text-textMain">No Active Startup Report</h2>
         <p className="text-textMuted mt-2">Vera requires an active validation report to provide context-aware insights.</p>
@@ -134,12 +187,17 @@ const VeraWorkspace = () => {
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
           <h4 className="text-xs font-bold text-textDim uppercase tracking-wider mb-2">Previous Sessions</h4>
-          <div className="p-3 rounded-lg bg-surface border border-border cursor-pointer hover:border-primary/50 transition-colors text-sm text-textMain truncate">
-            Market Expansion Strategy
-          </div>
-          <div className="p-3 rounded-lg bg-transparent cursor-pointer hover:bg-surface transition-colors text-sm text-textMuted truncate">
-            Investor Pitch Polish
-          </div>
+          {sessions.map(s => (
+            <div 
+              key={s.id} 
+              onClick={() => setActiveSessionId(s.id)}
+              className={`p-3 rounded-lg border cursor-pointer transition-colors text-sm truncate ${
+                activeSessionId === s.id ? 'bg-surface border-primary/50 text-textMain' : 'bg-transparent border-transparent hover:bg-surface text-textMuted'
+              }`}
+            >
+              {s.startup_idea}
+            </div>
+          ))}
         </div>
       </div>
 
@@ -153,31 +211,38 @@ const VeraWorkspace = () => {
             </div>
             <div>
               <h2 className="font-bold text-textMain">Vera AI Workspace</h2>
-              <p className="text-xs text-textMuted">Connected to Report ID: {sessionId.slice(0, 8)}...</p>
+              <p className="text-xs text-textMuted">Connected to Report ID: {activeSessionId?.slice(0, 8)}...</p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm font-medium text-textMuted">Persona:</span>
-            <select 
-              value={veraMode}
-              onChange={(e) => setVeraMode(e.target.value)}
-              className="bg-surface border border-border text-sm text-primary font-medium rounded-lg px-3 py-1.5 focus:outline-none focus:border-primary/50"
-            >
-              <option value="Founder">Founder Mode</option>
-              <option value="Investor">Investor Mode</option>
-              <option value="VC Partner">VC Partner Mode</option>
-              <option value="Competitor">Competitor Mode</option>
-              <option value="Customer">Customer Mode</option>
-            </select>
+          <div className="flex flex-col items-end">
+            <div className="flex items-center gap-4">
+              <span className="text-sm font-medium text-textMuted">Persona:</span>
+              <select 
+                value={veraMode}
+                onChange={(e) => setVeraMode(e.target.value)}
+                className="bg-surface border border-border text-sm text-primary font-medium rounded-lg px-3 py-1.5 focus:outline-none focus:border-primary/50"
+              >
+                <option value="Founder Mode">Founder</option>
+                <option value="Investor Mode">Investor</option>
+                <option value="VC Partner Mode">VC Partner</option>
+                <option value="Competitor Mode">Competitor</option>
+                <option value="Customer Mode">Customer</option>
+              </select>
+            </div>
+            <span className="text-[10px] text-textMuted mt-1">Choose a perspective for Vera's responses.</span>
           </div>
         </div>
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           <div className="max-w-3xl mx-auto w-full space-y-6">
-            {messages.map((msg, idx) => (
-              <MessageBubble key={idx} message={msg} />
-            ))}
+            {isHistoryLoading ? (
+              <div className="flex items-center justify-center p-8 text-textMuted">Loading history...</div>
+            ) : (
+              messages.map((msg, idx) => (
+                <MessageBubble key={idx} message={msg} />
+              ))
+            )}
             <div ref={messagesEndRef} />
           </div>
         </div>

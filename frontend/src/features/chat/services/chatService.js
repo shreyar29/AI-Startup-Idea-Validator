@@ -95,5 +95,21 @@ export const chatService = {
       throw new Error(`Failed to clear session: ${response.status}`);
     }
     return response.json();
+  },
+
+  async getSessionHistory(sessionId) {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/api/chat/session/${sessionId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch session history: ${response.status}`);
+    }
+    return response.json();
   }
 };

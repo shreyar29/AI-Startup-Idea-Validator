@@ -37,7 +37,7 @@ class ChatSession(Base):
     __tablename__ = "chat_sessions"
     id = Column(String, primary_key=True, default=generate_uuid)
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
-    report_id = Column(String, ForeignKey("reports.id"), nullable=True)
+    report_id = Column(String, ForeignKey("reports.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     
     owner = relationship("User", back_populates="chat_sessions")
@@ -59,8 +59,8 @@ class TelemetryLog(Base):
     __tablename__ = "telemetry_logs"
     id = Column(String, primary_key=True, default=generate_uuid)
     request_id = Column(String, nullable=True, index=True)
-    report_id = Column(String, ForeignKey("reports.id"), nullable=True)
-    session_id = Column(String, ForeignKey("chat_sessions.id"), nullable=True)
+    report_id = Column(String, ForeignKey("reports.id", ondelete="SET NULL"), nullable=True)
+    session_id = Column(String, ForeignKey("chat_sessions.id", ondelete="SET NULL"), nullable=True)
     agent_name = Column(String, nullable=False, index=True)
     latency_seconds = Column(Float, nullable=False)
     status = Column(String, nullable=False)
@@ -76,7 +76,7 @@ class Project(Base):
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
-    report_id = Column(String, ForeignKey("reports.id"), nullable=True) # Linked validation report
+    report_id = Column(String, ForeignKey("reports.id", ondelete="SET NULL"), nullable=True) # Linked validation report
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
@@ -101,4 +101,19 @@ class Task(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     project = relationship("Project", back_populates="tasks")
+    progress = relationship("TaskProgress", back_populates="task", cascade="all, delete-orphan")
 
+class TaskProgress(Base):
+    """
+    Progress log for a Task.
+    """
+    __tablename__ = "task_progress"
+    id = Column(String, primary_key=True, default=generate_uuid)
+    task_id = Column(String, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    status = Column(String, default="Todo", index=True)
+    progress_percentage = Column(Integer, default=0)
+    notes = Column(String, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    task = relationship("Task", back_populates="progress")

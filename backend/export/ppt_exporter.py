@@ -23,7 +23,13 @@ class PPTExporter:
         Generates an 18-slide investor-grade Pitch Deck PPTX.
         Returns the file path to the generated PPTX.
         """
+        from services.export_aggregator import ExportAggregator
+        
         logger.info(f"Generating Pitch Deck for idea: {report_data.get('startup_idea', 'Unknown')}")
+        
+        # Aggregate the raw analysis payload into the strict presentation schema
+        analysis_payload = report_data.get('analysis_payload', {})
+        payload = ExportAggregator.aggregate(analysis_payload)
         
         output_dir = os.path.join(os.getcwd(), "reports")
         os.makedirs(output_dir, exist_ok=True)
@@ -35,15 +41,19 @@ class PPTExporter:
         prs.slide_width = Inches(13.333)
         prs.slide_height = Inches(7.5)
         
-        analysis = report_data.get('analysis_payload', {})
         idea = str(report_data.get('startup_idea', 'New Venture'))
         
-        # Agents data
-        market = analysis.get('market_agent', {})
-        customer = analysis.get('customer_agent', {})
-        comp = analysis.get('competitor_agent', {})
-        gtm = analysis.get('gtm_agent', {})
-        score = analysis.get('startup_score_agent', {})
+        # Extracted components from FinalPresentationPayload
+        exec_summary = payload.get("executive_summary", {})
+        market = payload.get("market", {})
+        customer = payload.get("customer", {})
+        comp = payload.get("competitor", {})
+        strategy = payload.get("strategy", {})
+        risk = payload.get("risk_and_action", {})
+        execution = payload.get("execution", {})
+        
+        overall_score = payload.get("overall_score", 0)
+        verdict = payload.get("verdict", "Further Analysis Needed")
         
         # --- Helper Functions ---
         def add_slide_with_bg():
@@ -110,7 +120,7 @@ class PPTExporter:
         def safe_extract(d, key, default):
             if not d: return default
             val = d.get(key)
-            if not val or val == "N/A" or val == "None" or val == "": return default
+            if not val or val == "N/A" or val == "None" or val == "" or val == "Unknown": return default
             return val
 
         # 1: Cover
@@ -122,8 +132,8 @@ class PPTExporter:
         s2 = add_slide_with_bg()
         add_title(s2, "The Problem")
         add_subtitle(s2, "Why does this need to exist?")
-        pain_points = customer.get("pain_points", ["Inefficient legacy processes causing time and money loss", "Lack of specialized tooling for modern workflows"])
-        add_bullets(s2, pain_points[:4] if isinstance(pain_points, list) else [pain_points])
+        pain_points = customer.get("pain_points", ["Inefficient legacy processes causing time and money loss"])
+        add_bullets(s2, pain_points[:4] if pain_points else ["Inefficient legacy processes causing time and money loss"])
         
         # 3: Market Opportunity
         s3 = add_slide_with_bg()
@@ -143,15 +153,15 @@ class PPTExporter:
         s5 = add_slide_with_bg()
         add_title(s5, "The Product (MVP)")
         add_subtitle(s5, "Core value delivered on day one")
-        features = gtm.get("mvp_features", ["Core workflow automation", "Intuitive user dashboard", "Data export and reporting"])
-        add_bullets(s5, [f.get("feature", "Core Feature") if isinstance(f, dict) else f for f in features][:4])
+        features = execution.get("core_features", ["Core workflow automation"])
+        add_bullets(s5, features[:4] if features else ["Core workflow automation"])
         
         # 6: Why Now
         s6 = add_slide_with_bg()
         add_title(s6, "Why Now?")
         add_subtitle(s6, "Timing is everything in venture")
-        trends = market.get("market_trends", ["Rapid technology adoption in legacy sectors", "Shifting consumer expectations"])
-        add_bullets(s6, trends[:3] if isinstance(trends, list) else [trends])
+        trends = market.get("market_trends", ["Rapid technology adoption in legacy sectors"])
+        add_bullets(s6, trends[:3] if trends else ["Rapid technology adoption in legacy sectors"])
 
         # 7: TAM / SAM / SOM
         s7 = add_slide_with_bg()
@@ -165,8 +175,8 @@ class PPTExporter:
         s8 = add_slide_with_bg()
         add_title(s8, "Target Customer")
         add_subtitle(s8, "Who feels the pain most acutely?")
-        segments = customer.get("target_customer_segments", ["Enterprise Decision Makers"])
-        add_bullets(s8, segments[:3] if isinstance(segments, list) else [segments])
+        segments = customer.get("target_segments", ["Enterprise Decision Makers"])
+        add_bullets(s8, segments[:3] if segments else ["Enterprise Decision Makers"])
             
         # 9: Competitive Landscape
         s9 = add_slide_with_bg()
@@ -184,22 +194,22 @@ class PPTExporter:
         s11 = add_slide_with_bg()
         add_title(s11, "Business Model")
         add_subtitle(s11, "How we make money")
-        add_bullets(s11, [safe_extract(gtm, "business_model", "Tiered B2B SaaS subscription model."), "Predictable recurring revenue (ARR)", "High gross margins typical of SaaS"])
+        add_bullets(s11, [safe_extract(execution, "pricing_strategy", "Tiered B2B SaaS subscription model."), "Predictable recurring revenue (ARR)", "High gross margins typical of SaaS"])
         
         # 12: Go-To-Market Strategy
         s12 = add_slide_with_bg()
         add_title(s12, "Go-To-Market")
         add_subtitle(s12, "Acquiring our first 1,000 customers")
-        channels = gtm.get("acquisition_channels", ["Direct Sales", "Content Marketing", "Strategic Partnerships"])
-        add_bullets(s12, [c.get("channel", str(c)) if isinstance(c, dict) else str(c) for c in channels][:3])
+        channels = execution.get("acquisition_channels", ["Direct Sales", "Content Marketing"])
+        add_bullets(s12, channels[:3] if channels else ["Direct Sales", "Content Marketing"])
         
         # 13: Traction & Validation
         s13 = add_slide_with_bg()
         add_title(s13, "Validation & Traction")
         add_subtitle(s13, "AI-driven viability scoring")
-        add_stat_box(s13, 1.0, 2.5, f"{score.get('overall_score', 85)}/100", "AI Validation Score")
+        add_stat_box(s13, 1.0, 2.5, f"{overall_score}/100", "AI Validation Score")
         add_stat_box(s13, 5.0, 2.5, "Validated", "Problem-Solution Fit")
-        add_stat_box(s13, 9.0, 2.5, score.get("confidence_level", "High"), "AI Confidence")
+        add_stat_box(s13, 9.0, 2.5, "High", "AI Confidence")
         
         # 14: Product Roadmap
         s14 = add_slide_with_bg()
@@ -230,7 +240,7 @@ class PPTExporter:
         # 18: Closing Vision
         s18 = add_slide_with_bg()
         add_title(s18, "Join Us.", top=3.0)
-        add_subtitle(s18, score.get("verdict", "Building the future of this industry."), top=4.0)
+        add_subtitle(s18, verdict, top=4.0)
 
         prs.save(filepath)
         logger.info(f"Successfully generated investor deck: {filename}")

@@ -7,33 +7,12 @@ import {
 } from 'lucide-react';
 import { VeraHero } from '../components/vera/VeraHero';
 
+import { HeartPulse, Home as HomeIcon, Cat } from 'lucide-react';
+
 const SUGGESTIONS = [
-  { industry: "Cybersecurity", title: "SOC2 Automation", desc: "A B2B SaaS platform that automates SOC2 compliance for startups." },
-  { industry: "Health & Wellness", title: "Smart Meal Plans", desc: "An AI tool that generates personalized meal plans to minimize food waste." },
-  { industry: "Entertainment", title: "Indie Venue Booking", desc: "A marketplace connecting local indie musicians with venue owners." }
-];
-
-const CAPABILITIES = [
-  { icon: LineChart, title: "Market Intelligence", desc: "Analyzes industry trends, TAM, growth and demand." },
-  { icon: Target, title: "Competitor Analysis", desc: "Finds competitors and identifies differentiation opportunities." },
-  { icon: Users, title: "Customer Research", desc: "Builds customer personas using real market evidence." },
-  { icon: BrainCircuit, title: "AI Recommendation", desc: "Provides a data-backed Go / No-Go recommendation." },
-];
-
-const FLOW_STEPS = [
-  { icon: Lightbulb, title: "Idea", desc: "Submit concept" },
-  { icon: Search, title: "Research", desc: "Live web analysis" },
-  { icon: LineChart, title: "Market", desc: "Data analysis" },
-  { icon: Target, title: "Competitors", desc: "Feature comparison" },
-  { icon: CheckCircle2, title: "Verdict", desc: "Recommendation" },
-];
-
-const TRUST_ITEMS = [
-  "Multi-Agent AI",
-  "Real-time Market Intelligence",
-  "Live Competitor Research",
-  "Customer Persona Generation",
-  "Strategic Recommendations"
+  { icon: HeartPulse, industry: "Healthcare SaaS", title: "Compliance Copilot", desc: "AI-powered regulatory compliance copilot for SMB healthcare providers." },
+  { icon: HomeIcon, industry: "Marketplace", title: "Local Services", desc: "General local service marketplace connecting homeowners with various handymen and cleaners." },
+  { icon: Cat, industry: "Social", title: "Left-Handed Pets", desc: "Social network exclusively for left-handed pet owners to share specific tips and tricks." }
 ];
 
 const VALUE_PREVIEW = [
@@ -186,12 +165,17 @@ const Home = () => {
                 <button
                   key={i}
                   type="button"
-                  onClick={() => { setIdea(s.desc); setIsFocused(true); }}
+                  onClick={(e) => { 
+                    e.preventDefault();
+                    setIdea(s.desc); 
+                    navigate('/dashboard', { state: { idea: s.desc } });
+                  }}
                   className="group text-left p-6 rounded-2xl bg-surface/30 border border-white/5 hover:bg-surface/50 hover:border-primary/30 hover:-translate-y-1 transition-all duration-300 relative overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-primary shadow-sm hover:shadow-lg"
                 >
                   <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                   <div className="relative z-10">
                     <div className="flex items-center gap-2 mb-4">
+                      <s.icon className="w-5 h-5 text-primary" />
                       <span className="text-[10px] uppercase tracking-widest text-primary font-bold px-2.5 py-1 rounded-sm bg-primary/10">{s.industry}</span>
                     </div>
                     <h4 className="text-textMain font-semibold mb-2 group-hover:text-primary transition-colors">{s.title}</h4>
@@ -202,80 +186,6 @@ const Home = () => {
             </div>
           </div>
         </motion.div>
-
-        {/* 7 & 8. Trust Section - Distribute width and reduce vertical margin */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-16 lg:mt-20 pt-8 border-t border-white/5 max-w-6xl xl:max-w-7xl mx-auto"
-        >
-          <p className="text-center text-sm font-semibold text-textMuted tracking-widest uppercase mb-10">Powered By Enterprise-Grade Technology</p>
-          <div className="flex flex-wrap justify-center lg:justify-between gap-x-10 gap-y-8 opacity-70 px-4 xl:px-8">
-            {TRUST_ITEMS.map((item, i) => (
-              <div key={i} className="flex items-center gap-2.5 text-textMain font-medium text-sm sm:text-base">
-                <ShieldCheck className="w-5 h-5 text-textMuted" />
-                <span>{item}</span>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-
-        {/* 5. AI Capabilities - Increase grid width and gaps */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.4, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-16 lg:mt-20 w-full max-w-6xl xl:max-w-7xl mx-auto text-left"
-        >
-          <div className="text-center mb-12">
-            <h2 className="text-3xl sm:text-4xl font-extrabold text-textMain mb-4">Comprehensive AI Intelligence</h2>
-            <p className="text-textMuted text-lg max-w-2xl mx-auto">Four specialized AI agents analyze your idea from every angle, delivering a complete validation report in seconds.</p>
-          </div>
-          
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 xl:gap-10">
-            {CAPABILITIES.map((cap, i) => (
-              <div key={i} className="p-8 rounded-3xl bg-surface/40 border border-white/5 hover:border-primary/20 hover:bg-surface/60 transition-all duration-300 shadow-sm hover:shadow-md flex flex-col sm:flex-row gap-6 items-start">
-                <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0 text-textMain shadow-inner">
-                  <cap.icon className="w-7 h-7" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-textMain mb-3">{cap.title}</h3>
-                  <p className="text-textMuted leading-relaxed">{cap.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-
-        {/* 6. How It Works Timeline - Extended max-width */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-16 lg:mt-20 mb-8 w-full max-w-6xl xl:max-w-7xl mx-auto"
-        >
-          <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-extrabold text-textMain mb-4">How it works</h2>
-            <p className="text-textMuted text-lg max-w-2xl mx-auto">A seamless, automated pipeline from idea to validation.</p>
-          </div>
-          
-          <div className="flex flex-col md:flex-row justify-between relative px-4">
-            {/* Desktop Connector Line */}
-            <div className="hidden md:block absolute top-[28px] left-[10%] right-[10%] h-[2px] bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-            
-            {FLOW_STEPS.map((step, i) => (
-              <div key={i} className="relative z-10 flex flex-col items-center text-center flex-1 mb-12 md:mb-0">
-                <div className="w-14 h-14 rounded-full bg-surface border-4 border-background flex items-center justify-center text-primary mb-5 shadow-[0_0_20px_rgba(var(--color-primary),0.15)]">
-                  <step.icon className="w-6 h-6" />
-                </div>
-                <h4 className="text-textMain font-bold mb-2">{step.title}</h4>
-                <p className="text-sm text-textMuted max-w-[140px] mx-auto">{step.desc}</p>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-
       </div>
     </div>
   );

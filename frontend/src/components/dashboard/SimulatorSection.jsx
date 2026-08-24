@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useDashboardData } from '../../contexts/DashboardContext';
-import { Loader2, Zap, ArrowRight } from 'lucide-react';
+import { Loader2, Zap, ArrowRight, PenTool, Search, RefreshCw, BarChart2, Star, Sparkles } from 'lucide-react';
 import api from '../../services/api';
 
 const SimulatorSection = () => {
@@ -9,6 +9,7 @@ const SimulatorSection = () => {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [isExpanded, setIsExpanded] = useState(false);
   
   const reportId = requestId || data?.metadata?.request_id || "demo-uuid";
 
@@ -18,7 +19,10 @@ const SimulatorSection = () => {
     setError(null);
     try {
       const res = await api.post('/api/simulator/score', {
-        report_id: reportId, assumption
+        report_id: reportId, 
+        assumption,
+        startup_idea: data?.metadata?.startup_idea,
+        current_score: data?.startup_score_agent?.overall_score
       });
       setResult(res.data);
     } catch (err) {
@@ -46,21 +50,90 @@ const SimulatorSection = () => {
     return <span className="text-white">{scenario}</span>;
   };
 
+  if (!isExpanded) {
+    return (
+      <div className="relative w-full max-w-7xl mx-auto my-16 px-4 xl:px-0">
+        <div className="relative border border-amber-500/60 rounded-3xl p-10 md:p-16 flex flex-col items-center justify-center bg-[#070b14]/80 backdrop-blur-xl shadow-[0_0_50px_rgba(245,158,11,0.15)] overflow-hidden">
+          
+          {/* Top badge */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-amber-500/20 border border-amber-500/50 flex items-center justify-center shadow-[0_0_20px_rgba(245,158,11,0.5)] z-20">
+            <Zap className="w-5 h-5 text-amber-400" />
+          </div>
+
+          {/* Golden glows */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-amber-500/10 blur-[100px] rounded-full pointer-events-none" />
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[800px] h-[300px] bg-amber-600/10 blur-[120px] rounded-full pointer-events-none" />
+
+          {/* Bottom Arc */}
+          <div className="absolute bottom-[20%] left-1/2 -translate-x-1/2 w-[120%] md:w-[80%] h-[500px] rounded-[100%] border-b-[2px] border-amber-500/30 shadow-[0_20px_50px_rgba(245,158,11,0.2)] pointer-events-none" />
+          
+          <div className="relative z-10 text-center mb-12 w-full">
+            <h2 className="text-3xl md:text-4xl font-bold text-amber-400 mb-3 drop-shadow-[0_0_10px_rgba(245,158,11,0.3)]">What-If Simulator</h2>
+            <p className="text-slate-300 text-sm md:text-base">Explore alternative startup scenarios by changing an assumption.</p>
+          </div>
+
+          {/* Steps Process */}
+          <div className="relative z-10 flex flex-wrap justify-center items-center gap-4 md:gap-8 lg:gap-12 mb-16 w-full max-w-4xl">
+            {/* Connecting Line */}
+            <div className="hidden md:block absolute top-[24px] left-[10%] right-[10%] h-[1px] border-t border-dashed border-amber-500/30 -z-10" />
+            
+            {[
+              { icon: PenTool, text: 'Change ONE\nassumption', color: 'text-purple-400', border: 'border-purple-500/30' },
+              { icon: Search, text: 'Identify affected\nanalyses', color: 'text-blue-400', border: 'border-blue-500/30' },
+              { icon: RefreshCw, text: 'Re-run relevant\nanalysis', color: 'text-cyan-400', border: 'border-cyan-500/30' },
+              { icon: BarChart2, text: 'Compare with\noriginal', color: 'text-orange-400', border: 'border-orange-500/30' },
+              { icon: Star, text: 'New\nrecommendation', color: 'text-yellow-400', border: 'border-yellow-500/30' }
+            ].map((step, i) => (
+              <div key={i} className="flex flex-col items-center w-[120px] text-center">
+                <div className={`w-12 h-12 rounded-full border ${step.border} bg-[#0a0f1e] flex items-center justify-center mb-4 shadow-[0_0_15px_rgba(255,255,255,0.05)]`}>
+                  <step.icon className={`w-5 h-5 ${step.color}`} />
+                </div>
+                <span className="text-[11px] text-slate-400 leading-tight whitespace-pre-wrap font-medium">{step.text}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="relative z-10 text-center">
+            <h3 className="text-3xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-100 to-amber-200 mb-8 drop-shadow-[0_0_15px_rgba(245,158,11,0.5)]">
+              Is your idea ahead of time?
+            </h3>
+            
+            <button 
+              onClick={() => setIsExpanded(true)}
+              className="group flex items-center justify-center gap-2 mx-auto px-8 py-3 bg-transparent border border-amber-500/50 hover:bg-amber-500/10 text-amber-400 rounded-lg font-bold tracking-wider text-sm transition-all shadow-[0_0_20px_rgba(245,158,11,0.15)] hover:shadow-[0_0_30px_rgba(245,158,11,0.3)]"
+            >
+              LET'S SIMULATE
+              <Sparkles className="w-4 h-4 group-hover:rotate-12 transition-transform" />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="my-16 p-[1px] rounded-3xl bg-gradient-to-b from-amber-500/50 via-orange-500/20 to-transparent shadow-2xl">
+    <div className="my-16 p-[1px] rounded-3xl bg-gradient-to-b from-amber-500/50 via-orange-500/20 to-transparent shadow-2xl transition-all duration-500 animate-in fade-in slide-in-from-top-4">
       <div className="bg-[#0f1219] rounded-[23px] p-8 md:p-10 relative overflow-hidden">
         {/* Glow effect */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-amber-500/10 blur-[120px] rounded-full pointer-events-none" />
         
         <div className="relative z-10">
-          <div className="flex items-center gap-4 mb-3">
-            <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center border border-amber-500/30">
-              <Zap className="w-6 h-6 text-amber-400" />
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center border border-amber-500/30">
+                <Zap className="w-6 h-6 text-amber-400" />
+              </div>
+              <div>
+                <h2 className="text-3xl font-bold text-white">What-If Simulator</h2>
+                <p className="text-slate-400 mt-1">Explore alternative startup scenarios by changing an assumption.</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-3xl font-bold text-white">What-If Simulator</h2>
-              <p className="text-slate-400 mt-1">Explore alternative startup scenarios by changing an assumption.</p>
-            </div>
+            <button 
+              onClick={() => setIsExpanded(false)}
+              className="text-slate-400 hover:text-white px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors border border-transparent hover:border-white/10 text-sm font-medium"
+            >
+              Close Simulator
+            </button>
           </div>
           
           <div className="mt-10 grid grid-cols-1 xl:grid-cols-2 gap-10">

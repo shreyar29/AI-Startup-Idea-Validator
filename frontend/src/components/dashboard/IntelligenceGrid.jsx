@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { 
   FileSearch, TrendingUp, Users, ShieldAlert, 
-  Target, Rocket, Crosshair, Swords, FileText
+  Target, Rocket, Crosshair, Trophy
 } from 'lucide-react';
 import { useDashboardData } from '../../contexts/DashboardContext';
 
@@ -14,13 +14,6 @@ const IntelligenceGrid = () => {
 
   const cards = [
     {
-      title: 'EXECUTIVE SUMMARY',
-      description: 'High-level CEO view, scores, verdicts, and strategic insights.',
-      icon: FileText,
-      color: 'blue',
-      route: 'summary'
-    },
-    {
       title: 'RESEARCH EVIDENCE',
       description: 'Curated insights and data from credible sources.',
       icon: FileSearch,
@@ -31,7 +24,7 @@ const IntelligenceGrid = () => {
       title: 'MARKET INTELLIGENCE',
       description: 'Market size, growth trends and opportunity assessment.',
       icon: TrendingUp,
-      color: 'indigo',
+      color: 'purple',
       route: 'market'
     },
     {
@@ -44,8 +37,8 @@ const IntelligenceGrid = () => {
     {
       title: 'COMPETITIVE INTELLIGENCE',
       description: 'Competitors, positioning, feature gaps and differentiation.',
-      icon: Swords,
-      color: 'purple',
+      icon: Trophy,
+      color: 'orange',
       route: 'competitor'
     },
     {
@@ -66,7 +59,7 @@ const IntelligenceGrid = () => {
       title: 'MVP STRATEGY',
       description: 'Prioritized features and timeline to build your MVP.',
       icon: Rocket,
-      color: 'orange',
+      color: 'yellow',
       route: 'mvp'
     },
     {
@@ -86,20 +79,20 @@ const IntelligenceGrid = () => {
 
   const getColorClasses = (color) => {
     const map = {
-      blue: 'from-blue-500/20 to-blue-900/10 border-blue-500/30 hover:border-blue-400 text-blue-400 hover:shadow-[0_0_30px_rgba(59,130,246,0.3)]',
-      indigo: 'from-indigo-500/20 to-indigo-900/10 border-indigo-500/30 hover:border-indigo-400 text-indigo-400 hover:shadow-[0_0_30px_rgba(99,102,241,0.3)]',
-      cyan: 'from-cyan-500/20 to-cyan-900/10 border-cyan-500/30 hover:border-cyan-400 text-cyan-400 hover:shadow-[0_0_30px_rgba(6,182,212,0.3)]',
-      purple: 'from-purple-500/20 to-purple-900/10 border-purple-500/30 hover:border-purple-400 text-purple-400 hover:shadow-[0_0_30px_rgba(168,85,247,0.3)]',
-      red: 'from-red-500/20 to-red-900/10 border-red-500/30 hover:border-red-400 text-red-400 hover:shadow-[0_0_30px_rgba(239,68,68,0.3)]',
-      emerald: 'from-emerald-500/20 to-emerald-900/10 border-emerald-500/30 hover:border-emerald-400 text-emerald-400 hover:shadow-[0_0_30px_rgba(16,185,129,0.3)]',
-      orange: 'from-orange-500/20 to-orange-900/10 border-orange-500/30 hover:border-orange-400 text-orange-400 hover:shadow-[0_0_30px_rgba(249,115,22,0.3)]',
-      pink: 'from-pink-500/20 to-pink-900/10 border-pink-500/30 hover:border-pink-400 text-pink-400 hover:shadow-[0_0_30px_rgba(236,72,153,0.3)]',
+      blue: 'border-blue-500/50 hover:border-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.1)] hover:shadow-[0_0_30px_rgba(59,130,246,0.3)] text-blue-400',
+      purple: 'border-purple-500/50 hover:border-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.1)] hover:shadow-[0_0_30px_rgba(168,85,247,0.3)] text-purple-400',
+      cyan: 'border-cyan-500/50 hover:border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.1)] hover:shadow-[0_0_30px_rgba(6,182,212,0.3)] text-cyan-400',
+      orange: 'border-orange-500/50 hover:border-orange-400 shadow-[0_0_15px_rgba(249,115,22,0.1)] hover:shadow-[0_0_30px_rgba(249,115,22,0.3)] text-orange-400',
+      red: 'border-red-500/50 hover:border-red-400 shadow-[0_0_15px_rgba(239,68,68,0.1)] hover:shadow-[0_0_30px_rgba(239,68,68,0.3)] text-red-400',
+      emerald: 'border-emerald-500/50 hover:border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.1)] hover:shadow-[0_0_30px_rgba(16,185,129,0.3)] text-emerald-400',
+      yellow: 'border-yellow-500/50 hover:border-yellow-400 shadow-[0_0_15px_rgba(234,179,8,0.1)] hover:shadow-[0_0_30px_rgba(234,179,8,0.3)] text-yellow-400',
+      pink: 'border-pink-500/50 hover:border-pink-400 shadow-[0_0_15px_rgba(236,72,153,0.1)] hover:shadow-[0_0_30px_rgba(236,72,153,0.3)] text-pink-400',
     };
     return map[color] || map.blue;
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16 relative z-10 px-4 xl:px-0 max-w-7xl mx-auto">
       {cards.map((card, idx) => {
         const Icon = card.icon;
         const colorClass = getColorClasses(card.color);
@@ -107,16 +100,20 @@ const IntelligenceGrid = () => {
           <button
             key={idx}
             onClick={() => handleNavigate(card.route)}
-            className={`group relative text-left p-6 rounded-2xl bg-gradient-to-b bg-[#0B1120]/80 backdrop-blur-md border transition-all duration-300 overflow-hidden ${colorClass}`}
+            className={`group relative flex flex-col items-center justify-center w-full h-full min-h-[260px] text-center p-8 rounded-2xl bg-[#070b14]/90 backdrop-blur-md border ${colorClass} transition-all duration-300 overflow-hidden`}
           >
-            <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 bg-gradient-to-b transition-opacity duration-500 ${colorClass.split(' ')[0]} ${colorClass.split(' ')[1]}`} />
-            
-            <div className="relative z-10 flex flex-col h-full">
-              <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center mb-5 border border-white/10 group-hover:scale-110 transition-transform duration-300 shadow-lg">
-                <Icon className="w-6 h-6" />
+            <div className="relative z-10 flex flex-col items-center h-full w-full">
+              {/* Large Glowing Icon */}
+              <div className={`mb-6 transform group-hover:scale-110 group-hover:-translate-y-1 transition-all duration-300`}>
+                <Icon className={`w-12 h-12 drop-shadow-[0_0_10px_currentColor]`} />
               </div>
-              <h3 className="text-sm font-bold tracking-widest text-white mb-2">{card.title}</h3>
+              
+              <h3 className="text-sm font-bold tracking-widest text-white mb-3 leading-tight">{card.title}</h3>
               <p className="text-sm text-slate-400 leading-relaxed flex-grow">{card.description}</p>
+              
+              <div className="mt-6 text-sm font-medium opacity-80 group-hover:opacity-100 transition-opacity">
+                Explore &rarr;
+              </div>
             </div>
           </button>
         );

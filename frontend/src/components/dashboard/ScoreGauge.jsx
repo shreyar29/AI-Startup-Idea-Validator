@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 
-export const ScoreGauge = ({ score, title, subtitle, verdict, confidence, size = "lg" }) => {
+const ScoreGaugeComponent = ({ score, title, subtitle, verdict, confidence, size = "lg" }) => {
   // Normalize score to 0-100
   const normalizedScore = Math.min(100, Math.max(0, score || 0));
   
@@ -84,3 +84,4 @@ export const ScoreGauge = ({ score, title, subtitle, verdict, confidence, size =
     </div>
   );
 };
+export const ScoreGauge = React.memo(ScoreGaugeComponent);

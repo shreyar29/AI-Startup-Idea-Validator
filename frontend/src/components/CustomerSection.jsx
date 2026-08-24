@@ -201,15 +201,15 @@ const CustomerSection = ({ data }) => {
                 <div className="absolute left-0 right-0 top-1/2 h-1 bg-border/50 -translate-y-1/2 rounded-full"></div>
                 <div className="z-10 flex flex-col items-center bg-surface px-2 rounded-lg">
                   <span className="text-[10px] uppercase text-textMuted font-bold">Low</span>
-                  <span className="text-sm font-bold text-textMain">{data.willingness_to_pay.low || 'Unknown'}</span>
+                  <span className="text-sm font-bold text-textMain">{data.willingness_to_pay.low === 'Unknown' || !data.willingness_to_pay.low ? 'Data Confidence: Low' : data.willingness_to_pay.low}</span>
                 </div>
                 <div className="z-10 flex flex-col items-center bg-primary/10 border border-primary/30 px-3 py-1 rounded-lg shadow-sm">
                   <span className="text-[10px] uppercase text-primary font-bold">Expected</span>
-                  <span className="text-base font-black text-primary">{data.willingness_to_pay.expected || 'Unknown'}</span>
+                  <span className="text-base font-black text-primary">{data.willingness_to_pay.expected === 'Unknown' || !data.willingness_to_pay.expected ? 'Data Confidence: Low' : data.willingness_to_pay.expected}</span>
                 </div>
                 <div className="z-10 flex flex-col items-center bg-surface px-2 rounded-lg">
                   <span className="text-[10px] uppercase text-warning font-bold">Premium</span>
-                  <span className="text-sm font-bold text-warning">{data.willingness_to_pay.premium || 'Unknown'}</span>
+                  <span className="text-sm font-bold text-warning">{data.willingness_to_pay.premium === 'Unknown' || !data.willingness_to_pay.premium ? 'Data Confidence: Low' : data.willingness_to_pay.premium}</span>
                 </div>
               </div>
             </div>

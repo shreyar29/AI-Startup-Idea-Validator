@@ -16,7 +16,7 @@ export const validateIdea = async (idea, onStart, signal) => {
   }
 
   try {
-    const response = await api.post('/validation', null, {
+    const response = await api.post('/api/validation', null, {
       params: { query: idea },
       headers: {
         'X-Request-ID': requestId
@@ -44,7 +44,7 @@ export const validateIdea = async (idea, onStart, signal) => {
       attempts++;
 
       try {
-        const resultResponse = await api.get(`/validation/${jobId}/result`, { signal });
+        const resultResponse = await api.get(`/api/validation/${jobId}/result`, { signal });
         
         consecutiveErrors = 0; // Reset consecutive errors on successful fetch
 
@@ -89,7 +89,7 @@ export const validateIdea = async (idea, onStart, signal) => {
 
 export const getReportById = async (reportId, signal) => {
   try {
-    const response = await api.get(`/validation/${reportId}/result`, { signal });
+    const response = await api.get(`/api/validation/${reportId}/result`, { signal });
     if (response.data.status === 'success' || response.data.result) {
       return response.data.result;
     }
@@ -104,8 +104,8 @@ export const getReportById = async (reportId, signal) => {
 
 export const saveToHistory = async (userId, idea, resultData) => {
   try {
-    const response = await api.post('/history', {
-      user_id: parseInt(userId, 10),
+    const response = await api.post('/api/reports', {
+      user_id: String(userId),
       prompt: idea,
       response_data: resultData
     });

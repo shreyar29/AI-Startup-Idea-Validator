@@ -16,30 +16,32 @@ class PDFExporter:
         logger.info(f"Generating PDF report for idea: {report_data.get('startup_idea', 'Unknown')}")
         
         from services.reporting.generator import ReportGenerator
+        from services.export_aggregator import ExportAggregator
         
-        payload = report_data.get('analysis_payload', {})
+        # Aggregate to FinalPresentationPayload
+        raw_analysis = report_data.get('analysis_payload', {})
+        payload = ExportAggregator.aggregate(raw_analysis)
         
-        # Map the frontend analysis payload to the ReportContext structure expected by ReportGenerator
+        # Map the clean FinalPresentationPayload to ReportContext structure
         mapped_context = {
             "idea": {"description": report_data.get('startup_idea', 'Unknown')},
             "final_evaluation": {
-                "startup_score": payload.get('startup_score_agent', {}),
-                "market": payload.get('market_agent', {}),
-                "customer": payload.get('customer_agent', {}),
-                "competitor": {
-                    "competitors": payload.get('competitor_agent', {}).get('competitors', []),
-                    "gap_analysis": payload.get('competitor_agent', {}).get('gap_analysis', 'No gaps identified.')
+                "startup_score": {
+                    "overall_score": payload.get("overall_score", 0),
+                    "verdict": payload.get("verdict", "Further Analysis Needed"),
+                    "founder_recommendation": payload.get("executive_summary", {}).get("founder_recommendation", "")
                 },
-                "swot": {
-                    "strengths": [s.get('insight', s.get('title', str(s))) if isinstance(s, dict) else s for s in payload.get('swot_agent', {}).get('strengths', [])],
-                    "weaknesses": [s.get('insight', s.get('title', str(s))) if isinstance(s, dict) else s for s in payload.get('swot_agent', {}).get('weaknesses', [])],
-                    "opportunities": [s.get('insight', s.get('title', str(s))) if isinstance(s, dict) else s for s in payload.get('swot_agent', {}).get('opportunities', [])],
-                    "threats": [s.get('insight', s.get('title', str(s))) if isinstance(s, dict) else s for s in payload.get('swot_agent', {}).get('threats', [])]
+                "market": payload.get("market", {}),
+                "customer": payload.get("customer", {}),
+                "competitor": payload.get("competitor", {}),
+                "swot": payload.get("strategy", {}),
+                "risk": {
+                    "top_risks": payload.get("risk_and_action", {}).get("top_risks", []),
+                    "recommendations": payload.get("risk_and_action", {}).get("recommendations", [])
                 },
-                "risk": payload.get('risk_agent', {}),
-                "mvp": {"core_features": [f.get('feature', '') if isinstance(f, dict) else f for f in payload.get('gtm_agent', {}).get('mvp_features', [])]},
-                "gtm": payload.get('gtm_agent', {}),
-                "executive_summary": payload.get('startup_score_agent', {}).get('executive_summary', {})
+                "mvp": {"core_features": payload.get("execution", {}).get("core_features", [])},
+                "gtm": payload.get("execution", {}),
+                "executive_summary": payload.get("executive_summary", {})
             }
         }
         

@@ -4,9 +4,9 @@ import json
 import asyncio
 from utils.progress import ProgressManager
 
-router = APIRouter()
+router = APIRouter(prefix="/api/progress", tags=["progress"])
 
-@router.get("/progress/{request_id}")
+@router.get("/{request_id}")
 async def get_progress(request_id: str, request: Request):
     session = await ProgressManager.get_session(request_id)
     retries = 0

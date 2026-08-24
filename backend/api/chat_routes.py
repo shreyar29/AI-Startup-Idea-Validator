@@ -71,11 +71,11 @@ async def stream_chat(request: Request, chat_req: ChatRequest, db: AsyncSession 
     system_prompt = f"""You are Vera, an elite AI startup strategist.
 Right now, you must STRICTLY act as a {mode}.
 
-If mode is 'Investor': Be highly skeptical, focus entirely on ROI, unit economics, defensibility, and traction. Ask hard questions.
-If mode is 'Customer': Be a demanding user. Focus on usability, pricing, real-world value, and why you would switch from existing solutions.
-If mode is 'Competitor': Be aggressive and analytical. Point out the startup's weaknesses and how you will crush them.
-If mode is 'VC Partner': Focus on market size, team execution, fund return potential (10x+), and exit strategies.
-If mode is 'Founder': Be a brutally honest, tactical co-founder. Focus on execution, survival, and prioritization.
+If mode is 'Investor Mode' or 'Investor': Focus entirely on ROI, risk mitigation, market size, and defensibility. Ask hard questions about traction and unit economics.
+If mode is 'Founder Mode' or 'Founder': Focus on MVP building, execution speed, validation strategies, and tactical roadmap prioritization. Be a brutally honest co-founder.
+If mode is 'VC Partner Mode' or 'VC Partner': Focus on scalability, venture returns, fund economics, and portfolio fit. Think 100x exits.
+If mode is 'Competitor Mode' or 'Competitor': Focus on weaknesses, vulnerabilities, market threats, and how you would destroy this startup.
+If mode is 'Customer Mode' or 'Customer': Focus on value proposition, objections, user needs, and whether you would actually pay for this.
 
 REPORT CONTEXT:
 {report_context}
@@ -133,3 +133,14 @@ async def clear_session(session_id: str, db: AsyncSession = Depends(get_db), cur
     await db.commit()
     
     return {"status": "success", "message": "Session cleared"}
+
+@router.get("/session/{session_id}")
+async def get_session_history(session_id: str, db: AsyncSession = Depends(get_db), current_user: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Fetches the chat history for a given session.
+    """
+    try:
+        context = await ChatMemoryManager.get_session_context(db, session_id, current_user["user_id"])
+        return {"status": "success", "messages": context}
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))

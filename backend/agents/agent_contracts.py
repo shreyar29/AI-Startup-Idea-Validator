@@ -12,9 +12,9 @@ class StartupIdea(BaseModel):
     proposed_features: List[str] = Field(default_factory=list)
 
 class MarketAnalysis(AgentMetadata):
-    market_size: str = "Unknown"
+    market_size: str = Field(default="Unknown", description="TAM, SAM, SOM sizing")
     growth_rate: str = "Unknown"
-    market_trends: List[str] = Field(default_factory=list)
+    market_trends: List[str] = Field(default_factory=list, description="Market growth trends and dynamics")
     market_maturity: str = "Unknown"
     opportunity_score: int = 50
     confidence_score: float = 0.5
@@ -32,16 +32,15 @@ class CompetitorAnalysis(AgentMetadata):
     confidence_score: float = 0.5
 
 class RiskAnalysis(AgentMetadata):
-    risks: List[Any] = Field(default_factory=list)
+    risks: List[Any] = Field(default_factory=list, description="External risks, market threats, and likelihood")
     overall_risk_score: int = 50
-    recommendations: List[str] = Field(default_factory=list)
+    recommendations: List[str] = Field(default_factory=list, description="Mitigation strategies for identified risks")
     confidence_score: float = 0.5
 
 class SWOTAnalysis(AgentMetadata):
-    strengths: List[Any] = Field(default_factory=list)
-    weaknesses: List[Any] = Field(default_factory=list)
-    opportunities: List[Any] = Field(default_factory=list)
-    threats: List[Any] = Field(default_factory=list)
+    strengths: List[Any] = Field(default_factory=list, description="Internal strengths of the team or idea")
+    weaknesses: List[Any] = Field(default_factory=list, description="Internal weaknesses of the team or idea")
+    opportunities: List[Any] = Field(default_factory=list, description="Strategic positioning opportunities")
     confidence_score: float = 0.5
 
 class MVPAnalysis(AgentMetadata):

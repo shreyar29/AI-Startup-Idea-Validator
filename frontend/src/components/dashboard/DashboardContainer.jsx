@@ -40,7 +40,11 @@ const DashboardContainer = () => {
     else navigate('/');
   }} />;
   
-  if (!data || !data.metadata) return <ErrorState message="Invalid or no data received" onRetry={() => navigate('/')} />;
+  if (!data || (!data.metadata && !data.error)) return <ErrorState message="Invalid or no data received" onRetry={() => navigate('/')} />;
+
+  if (data.error) {
+    return <ErrorState message={data.message || data.error} onRetry={() => navigate('/')} />;
+  }
 
   return (
     <DashboardDataProvider 

@@ -82,7 +82,7 @@ const MarketSection = ({ data }) => {
               <TrendingUp className="w-4 h-4 text-success"/> Growth Rate
             </div>
             <div className="text-3xl font-bold text-success leading-tight mt-auto z-10" title={data.growth_rate}>
-              {data.growth_rate === 'Insufficient verified evidence.' ? 'Evidence insufficient' : (data.growth_rate || 'Unknown')}
+              {data.growth_rate === 'Insufficient verified evidence.' || data.growth_rate === 'Unknown' || !data.growth_rate ? 'Data Confidence: Low' : data.growth_rate}
             </div>
             {growthNum > 0 && (
               <div className="absolute inset-0 pt-16 px-4 opacity-20 pointer-events-none" aria-hidden="true">
@@ -102,7 +102,7 @@ const MarketSection = ({ data }) => {
               <Target className="w-4 h-4 text-warning"/> Market Maturity
             </div>
             <div className="text-2xl font-bold text-textMain leading-tight capitalize mt-auto" title={data.market_maturity}>
-              {data.market_maturity === 'Insufficient verified evidence.' ? 'Evidence insufficient' : (data.market_maturity || 'Unknown')}
+              {data.market_maturity === 'Insufficient verified evidence.' || data.market_maturity === 'Unknown' || !data.market_maturity ? 'Evidence Confidence: Limited' : data.market_maturity}
             </div>
           </div>
         </div>
@@ -122,7 +122,7 @@ const MarketSection = ({ data }) => {
               <div className="absolute left-0 top-0 bottom-0 w-2 bg-primary/80"></div>
               <div className="pl-3">
                 <div className="text-[10px] text-primary font-bold uppercase tracking-wider mb-1">Total Addressable Market (TAM)</div>
-                <div className="text-xl md:text-2xl font-black text-textMain">{data.tam === 'Unknown' ? data.market_size || 'Unknown' : data.tam}</div>
+                <div className="text-xl md:text-2xl font-black text-textMain">{data.tam === 'Unknown' || !data.tam ? (data.market_size === 'Unknown' || !data.market_size ? 'Data Confidence: Low' : data.market_size) : data.tam}</div>
               </div>
             </div>
 
@@ -131,7 +131,7 @@ const MarketSection = ({ data }) => {
               <div className="absolute left-0 top-0 bottom-0 w-2 bg-success/80"></div>
               <div className="pl-3">
                 <div className="text-[10px] text-success font-bold uppercase tracking-wider mb-1">Serviceable Available Market (SAM)</div>
-                <div className="text-lg md:text-xl font-bold text-textMain">{data.sam || 'Unknown'}</div>
+                <div className="text-lg md:text-xl font-bold text-textMain">{data.sam === 'Unknown' || !data.sam ? 'Data Confidence: Low' : data.sam}</div>
               </div>
             </div>
 
@@ -140,7 +140,7 @@ const MarketSection = ({ data }) => {
               <div className="absolute left-0 top-0 bottom-0 w-2 bg-warning/80"></div>
               <div className="pl-3">
                 <div className="text-[10px] text-warning font-bold uppercase tracking-wider mb-1">Serviceable Obtainable Market (SOM)</div>
-                <div className="text-md md:text-lg font-bold text-textMain">{data.som || 'Unknown'}</div>
+                <div className="text-md md:text-lg font-bold text-textMain">{data.som === 'Unknown' || !data.som ? 'Data Confidence: Low' : data.som}</div>
               </div>
             </div>
           </div>

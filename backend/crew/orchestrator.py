@@ -270,12 +270,32 @@ class StartupValidatorOrchestrator:
 
         correlation_id = str(uuid.uuid4())[:8]
         start_time = time.time()
-
+        
         logger.info(
             f"[{correlation_id}] "
             f"P2P Mesh Network starting validation "
             f"for idea of length: {len(startup_idea)}"
         )
+        
+        # Priority 8: STRICT EVALUATION MODE
+        try:
+            eval_prompt = f"Is the following text a valid startup idea, business concept, or product? Text: '{startup_idea}'. Reply with ONLY 'YES' or 'NO'."
+            eval_result = await self.llm_client.generate_response(system_prompt="You are a strict binary evaluator.", user_prompt=eval_prompt)
+            if "NO" in eval_result.upper():
+                logger.warning(f"[{correlation_id}] Invalid startup idea rejected: {startup_idea}")
+                return {
+                    "metadata": {
+                        "startup_idea": startup_idea,
+                        "correlation_id": correlation_id,
+                        "execution_time_seconds": round(time.time() - start_time, 2),
+                        "status": "failed",
+                        "agent_metrics": {}
+                    },
+                    "error": "INVALID_STARTUP_IDEA",
+                    "message": "The input provided does not appear to be a valid startup idea. Please provide a clear business concept, product, or service."
+                }
+        except Exception as e:
+            logger.warning(f"[{correlation_id}] Strict evaluation failed, proceeding anyway: {e}")
 
         shared_context = self._build_shared_context(startup_idea, correlation_id, request_id)
         metrics: Dict[str, Any] = {}
@@ -332,7 +352,7 @@ class StartupValidatorOrchestrator:
             "web_search": WebSearchAgent(query_strategist, self.search_service, self.result_processor, shared_context=shared_context),
             "market": MarketOpportunityAgent(shared_context),
             "customer": CustomerAgent(shared_context),
-            "competitor": CompetitorAgent(shared_context),
+            "competitor": CompetitorAgent(shared_context, llm_client=self.llm_client),
             "comparison": ComparisonAgent(shared_context, llm_client=self.llm_client),
             "risk": RiskAgent(shared_context, llm_client=self.llm_client),
             "swot": SWOTAgent(shared_context, llm_client=self.llm_client),

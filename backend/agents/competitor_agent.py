@@ -39,8 +39,9 @@ class CompetitorAgent:
     Operates as a decentralized node in the A2A Mesh Network.
     """
 
-    def __init__(self, shared_context: dict):
+    def __init__(self, shared_context: dict, llm_client=None):
         self.context = shared_context
+        self.llm_client = llm_client
         self.peers = {}
         self._analysis_task = None
         self.status = "idle" # States: idle, started, success, failed, timeout
@@ -411,6 +412,42 @@ class CompetitorAgent:
             comp["position_y"] = py
             
         validated_competitors.sort(key=lambda x: x["threat_score"], reverse=True)
+        
+        # LLM Strict Validation: Ensure no unwanted or fake competitors
+        if self.llm_client and validated_competitors:
+            logger.info(f"{log_prefix} Performing LLM strict validation on competitors.")
+            try:
+                comp_names = [c["name"] for c in validated_competitors]
+                prompt = f"""
+                Startup Idea: {idea}
+                Potential Competitors Found: {json.dumps(comp_names)}
+                
+                Identify ONLY the genuine product/company competitors from this list.
+                STRICTLY REMOVE: 
+                - Review sites (e.g. G2, Capterra, Trustpilot, ProductHunt)
+                - News/Media (e.g. Forbes, TechCrunch)
+                - Generic terms (e.g. 'Software', 'Best', 'Unknown')
+                - Companies completely unrelated to the startup idea.
+                
+                Respond with a JSON array of strings containing ONLY the valid competitor names exactly as provided. Do not include markdown.
+                """
+                response = await self.llm_client.generate_response(
+                    system_prompt="You are a strict data auditor. Only output a JSON array of strings.",
+                    user_prompt=prompt,
+                    temperature=0.0
+                )
+                
+                import json
+                try:
+                    valid_names = json.loads(response.strip('` \n').replace('json\n', ''))
+                    if isinstance(valid_names, list):
+                        valid_names_lower = [str(n).lower() for n in valid_names]
+                        validated_competitors = [c for c in validated_competitors if c["name"].lower() in valid_names_lower]
+                except Exception as e:
+                    logger.warning(f"{log_prefix} Failed to parse LLM validation response: {e}")
+            except Exception as e:
+                logger.warning(f"{log_prefix} LLM strict validation failed: {e}")
+
         for i, comp in enumerate(validated_competitors):
             comp["rank"] = i + 1
             

@@ -1,46 +1,42 @@
 import asyncio
 import uuid
+import logging
 from fastapi import APIRouter, HTTPException, Query, Depends, Response, Request
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+import json
+
 from core.rate_limiter import limiter
-from crew.orchestrator import StartupValidatorOrchestrator
 from core.dependencies import get_orchestrator
-from utils.logger import get_logger
-from guardrails.manager import GuardrailManager
+from crew.orchestrator import StartupValidatorOrchestrator
 from utils.progress import ProgressManager
 from core.security import SecurityManager
+from database.database import get_db
+from database.models import Report
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/validation", tags=["validation"])
 
-router = APIRouter()
+# In a fully unified architecture, jobs can be stored in the database or Redis.
+# For simplicity and to avoid Redis dependency, we will store pending jobs in memory 
+# for polling, and persist the final report to the DB.
+_IN_MEMORY_JOBS = {}
 
-import os
-import json
-import uuid
-
-JOBS_DIR = os.path.join(os.path.dirname(__file__), "..", ".jobs")
-os.makedirs(JOBS_DIR, exist_ok=True)
-
-def _save_job(job_id: str, data: dict):
-    filepath = os.path.join(JOBS_DIR, f"{job_id}.json")
-    with open(filepath, "w", encoding="utf-8") as f:
-        json.dump(data, f)
-
-def _get_job(job_id: str):
-    filepath = os.path.join(JOBS_DIR, f"{job_id}.json")
-    if os.path.exists(filepath):
-        with open(filepath, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return None
-
-async def run_validation_background(request_id: str, query: str, orchestrator: StartupValidatorOrchestrator):
+async def run_validation_background(job_id: str, query: str, orchestrator: StartupValidatorOrchestrator):
     try:
-        result = await orchestrator.validate_idea(query, request_id)
-        _save_job(request_id, {"status": "SUCCESS", "result": result})
+        result = await orchestrator.validate_idea(query, job_id)
+        
+        # In a real enterprise system, we would associate this with the logged-in user.
+        # Since this demo might run unauthenticated initially, we use a placeholder user ID
+        # or require auth. For now, we just store it in memory for the polling client to retrieve.
+        # Once retrieved, the client (or a subsequent authenticated call) can formally persist it to a Workspace Project.
+        
+        _IN_MEMORY_JOBS[job_id] = {"status": "SUCCESS", "result": result}
     except Exception as e:
-        logger.exception(f"Background validation failed for {request_id}")
-        _save_job(request_id, {"status": "FAILURE", "error": str(e)})
+        logger.exception(f"Background validation failed for {job_id}")
+        _IN_MEMORY_JOBS[job_id] = {"status": "FAILURE", "error": str(e)}
 
-@router.post("/validation")
+@router.post("")
 @limiter.limit("10/minute")
 async def start_validation(
     request: Request,
@@ -67,8 +63,7 @@ async def start_validation(
         await ProgressManager.publish(request_id, "Validation", "running", "Validating input parameters...")
         await ProgressManager.publish(request_id, "Validation", "completed", "Input validated successfully.")
         
-        # Queue the job as an asyncio background task
-        _save_job(request_id, {"status": "PENDING"})
+        _IN_MEMORY_JOBS[request_id] = {"status": "PENDING"}
         asyncio.create_task(run_validation_background(request_id, valid_query, orchestrator))
         
         return {"job_id": request_id, "request_id": request_id, "status": "queued"}
@@ -78,9 +73,9 @@ async def start_validation(
         await ProgressManager.publish(request_id, "System", "failed", "An unexpected error occurred.")
         raise HTTPException(status_code=500, detail="An unexpected error occurred while queuing your request.")
 
-@router.get("/validation/{job_id}/result")
+@router.get("/{job_id}/result")
 async def get_validation_result(job_id: str):
-    task_result = _get_job(job_id)
+    task_result = _IN_MEMORY_JOBS.get(job_id)
     if not task_result:
         raise HTTPException(status_code=404, detail="Job not found")
         

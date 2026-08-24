@@ -23,9 +23,6 @@ from core.config import settings
 from core.container import container
 
 # Core Mesh Routers (Always available)
-from routes.search import router as search_router
-from routes.progress import router as progress_router
-
 # Enterprise Architecture Routers (Optional)
 try:
     from api.auth_routes import router as auth_router
@@ -36,6 +33,8 @@ try:
     from api.workspace_routes import router as workspace_router
     from api.metrics_routes import router as metrics_router
     from api.simulator_routes import router as simulator_router
+    from api.search_routes import router as search_router
+    from api.progress_routes import router as progress_router
     HAS_ENTERPRISE_API = True
 except ImportError as e:
     HAS_ENTERPRISE_API = False
@@ -204,8 +203,6 @@ async def global_exception_handler(request: Request, exc: Exception):
         }
     )
 
-app.include_router(search_router, tags=["search"])
-app.include_router(progress_router, prefix="/api", tags=["progress"])
 
 if HAS_ENTERPRISE_API:
     app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
@@ -216,6 +213,8 @@ if HAS_ENTERPRISE_API:
     app.include_router(workspace_router)
     app.include_router(metrics_router)
     app.include_router(simulator_router)
+    app.include_router(search_router, tags=["search"])
+    app.include_router(progress_router, tags=["progress"])
 
 
 
@@ -258,11 +257,11 @@ from auth.jwt_manager import JWTManager
 from fastapi import Depends, HTTPException
 
 async def verify_admin_sse(request: Request):
-    token = request.query_params.get("token")
-    if not token:
-        auth_header = request.headers.get("Authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header.split(" ")[1]
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+    else:
+        token = None
             
     if not token:
         raise HTTPException(status_code=401, detail="Authentication required for log streaming")

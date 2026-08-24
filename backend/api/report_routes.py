@@ -5,8 +5,30 @@ from typing import List, Dict, Any
 from database.database import get_db
 from database.models import Report
 from auth.jwt_manager import get_current_user
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
+
+class ReportCreate(BaseModel):
+    user_id: str = Field(..., description="The ID of the user")
+    prompt: str = Field(..., description="The validated startup idea")
+    response_data: Dict[str, Any] = Field(..., description="The comprehensive validation result JSON")
+
+@router.post("")
+async def create_report(entry: ReportCreate, db: AsyncSession = Depends(get_db)):
+    """
+    Creates a new report. Replaces legacy /history endpoint.
+    """
+    new_report = Report(
+        user_id=entry.user_id,
+        startup_idea=entry.prompt,
+        analysis_payload=entry.response_data,
+        validation_score=entry.response_data.get("startup_score_agent", {}).get("overall_score", 0)
+    )
+    db.add(new_report)
+    await db.commit()
+    await db.refresh(new_report)
+    return {"status": "success", "id": new_report.id}
 
 @router.get("")
 async def get_reports(db: AsyncSession = Depends(get_db), current_user: Dict[str, Any] = Depends(get_current_user)):
