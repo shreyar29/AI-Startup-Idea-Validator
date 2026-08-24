@@ -7,7 +7,7 @@ class MetricsService:
     _agent_stats: Dict[str, Dict[str, Any]] = {}
     
     @classmethod
-    def record_agent_execution(cls, agent_name: str, latency_seconds: float, status: str, failure_reason: str = None):
+    def record_agent_execution(cls, agent_name: str, latency_seconds: float, status: str, failure_reason: str = None, request_id: str = None, report_id: str = None, session_id: str = None):
         if agent_name not in cls._agent_stats:
             cls._agent_stats[agent_name] = {
                 "total_calls": 0,

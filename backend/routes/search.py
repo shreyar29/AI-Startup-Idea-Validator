@@ -13,16 +13,32 @@ logger = get_logger(__name__)
 
 router = APIRouter()
 
-# In-memory store for background task results (Safe fallback for Celery)
-validation_results = {}
+import os
+import json
+import uuid
+
+JOBS_DIR = os.path.join(os.path.dirname(__file__), "..", ".jobs")
+os.makedirs(JOBS_DIR, exist_ok=True)
+
+def _save_job(job_id: str, data: dict):
+    filepath = os.path.join(JOBS_DIR, f"{job_id}.json")
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+
+def _get_job(job_id: str):
+    filepath = os.path.join(JOBS_DIR, f"{job_id}.json")
+    if os.path.exists(filepath):
+        with open(filepath, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return None
 
 async def run_validation_background(request_id: str, query: str, orchestrator: StartupValidatorOrchestrator):
     try:
         result = await orchestrator.validate_idea(query, request_id)
-        validation_results[request_id] = {"status": "SUCCESS", "result": result}
+        _save_job(request_id, {"status": "SUCCESS", "result": result})
     except Exception as e:
         logger.exception(f"Background validation failed for {request_id}")
-        validation_results[request_id] = {"status": "FAILURE", "error": str(e)}
+        _save_job(request_id, {"status": "FAILURE", "error": str(e)})
 
 @router.post("/validation")
 @limiter.limit("10/minute")
@@ -52,7 +68,7 @@ async def start_validation(
         await ProgressManager.publish(request_id, "Validation", "completed", "Input validated successfully.")
         
         # Queue the job as an asyncio background task
-        validation_results[request_id] = {"status": "PENDING"}
+        _save_job(request_id, {"status": "PENDING"})
         asyncio.create_task(run_validation_background(request_id, valid_query, orchestrator))
         
         return {"job_id": request_id, "request_id": request_id, "status": "queued"}
@@ -64,7 +80,7 @@ async def start_validation(
 
 @router.get("/validation/{job_id}/result")
 async def get_validation_result(job_id: str):
-    task_result = validation_results.get(job_id)
+    task_result = _get_job(job_id)
     if not task_result:
         raise HTTPException(status_code=404, detail="Job not found")
         

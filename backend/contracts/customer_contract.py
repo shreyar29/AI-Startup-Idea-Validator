@@ -10,7 +10,7 @@ class CustomerContract(BaseAgentContract):
     customer_journey: List[Dict[str, Any]] = Field(default_factory=list)
     sentiment: Dict[str, Any] = Field(default_factory=dict)
     feature_demand: List[Dict[str, Any]] = Field(default_factory=list)
+    willingness_to_pay: Dict[str, Any] = Field(default_factory=lambda: {"low": "$0", "expected": "$10", "premium": "$50"})
     customer_validation_metrics: Dict[str, Any] = Field(default_factory=dict)
     confidence_score: float = 0.5
     confidence: str = "MEDIUM"
-    source_traceability: List[Dict[str, Any]] = Field(default_factory=list)

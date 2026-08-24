@@ -9,4 +9,3 @@ class CompetitorContract(BaseAgentContract):
     no_competitor_data_found: bool = False
     confidence_score: float = 0.5
     confidence: str = "MEDIUM"
-    source_traceability: List[Dict[str, Any]] = Field(default_factory=list)

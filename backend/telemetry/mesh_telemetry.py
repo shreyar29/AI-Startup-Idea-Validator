@@ -26,11 +26,25 @@ def track_agent_metrics(agent_name: str):
                 raise
             finally:
                 latency = time.perf_counter() - start_time
+                
+                # Try to extract context IDs if available on the agent
+                request_id = None
+                report_id = None
+                session_id = None
+                
+                if hasattr(self, 'context') and isinstance(self.context, dict):
+                    request_id = self.context.get("correlation_id")
+                    report_id = self.context.get("report_id")
+                    session_id = self.context.get("session_id")
+                
                 MetricsService.record_agent_execution(
                     agent_name=agent_name,
                     latency_seconds=latency,
                     status=status,
-                    failure_reason=failure_reason
+                    failure_reason=failure_reason,
+                    request_id=request_id,
+                    report_id=report_id,
+                    session_id=session_id
                 )
                 logger.info(f"[{agent_name}] Telemetry recorded: {status} in {latency:.2f}s")
         return wrapper

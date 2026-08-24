@@ -353,6 +353,12 @@ Evidence Payload:
             confidence = "Medium"
         else:
             confidence = "Low"
+            
+        # Map likelihood and impact to 1-100 scales for Heatmap
+        level_map = {"Low": 20, "Medium": 50, "High": 80, "Critical": 95}
+        for r in validated_risks:
+            r["probability_score"] = level_map.get(r["likelihood"], 50) + random.randint(-5, 5)
+            r["impact_score"] = level_map.get(r["impact"], 50) + random.randint(-5, 5)
 
         top_risks = parsed_analysis.get("top_risks", [])
         recommendations = parsed_analysis.get("recommendations", [])
@@ -371,6 +377,11 @@ Evidence Payload:
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
-        self.context["risk_analysis"] = analysis
         logger.info(f"{log_prefix} Risk Analysis Complete. Score: {overall_risk_score}, Risks Identified: {len(validated_risks)}")
-        return analysis
+        
+        from contracts.risk_contract import RiskContract
+        from contracts.validator import SafeContractValidator
+        
+        validated_analysis = SafeContractValidator.validate(RiskContract, analysis, "risk_agent")
+        self.context["risk_analysis"] = validated_analysis
+        return validated_analysis

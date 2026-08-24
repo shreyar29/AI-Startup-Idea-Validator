@@ -187,14 +187,37 @@ const CustomerSection = ({ data }) => {
       {/* 4 & 5: Buying Behaviour and Feature Demand */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         
-        {/* Premium Buying Behaviour */}
+        {/* Willingness to Pay & Buying Behaviour */}
         <div className="space-y-5">
           <h3 className="text-sm font-bold text-textMuted uppercase tracking-widest flex items-center gap-2 border-b border-border/30 pb-2">
-            <CreditCard className="w-4 h-4 text-warning" /> Buying Behaviour
+            <DollarSign className="w-4 h-4 text-warning" /> Willingness To Pay & Buying Behaviour
           </h3>
-          <div className="grid grid-cols-1 gap-4">
+          
+          {/* Willingness To Pay Visualizer */}
+          {data.willingness_to_pay && (
+            <div className="glass-panel p-5 rounded-2xl border-border/50 bg-gradient-to-br from-surface to-background flex flex-col gap-3 shadow-md mb-4">
+              <div className="text-[10px] text-textMuted font-bold uppercase tracking-widest text-center">Estimated Pricing Bands</div>
+              <div className="flex justify-between items-center relative">
+                <div className="absolute left-0 right-0 top-1/2 h-1 bg-border/50 -translate-y-1/2 rounded-full"></div>
+                <div className="z-10 flex flex-col items-center bg-surface px-2 rounded-lg">
+                  <span className="text-[10px] uppercase text-textMuted font-bold">Low</span>
+                  <span className="text-sm font-bold text-textMain">{data.willingness_to_pay.low || 'Unknown'}</span>
+                </div>
+                <div className="z-10 flex flex-col items-center bg-primary/10 border border-primary/30 px-3 py-1 rounded-lg shadow-sm">
+                  <span className="text-[10px] uppercase text-primary font-bold">Expected</span>
+                  <span className="text-base font-black text-primary">{data.willingness_to_pay.expected || 'Unknown'}</span>
+                </div>
+                <div className="z-10 flex flex-col items-center bg-surface px-2 rounded-lg">
+                  <span className="text-[10px] uppercase text-warning font-bold">Premium</span>
+                  <span className="text-sm font-bold text-warning">{data.willingness_to_pay.premium || 'Unknown'}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-3">
             {buyingBehaviours.length > 0 ? buyingBehaviours.map((bb, i) => (
-              <div key={i} className="glass-panel p-5 rounded-xl border-l-4 border-l-warning/70 hover:-translate-y-0.5 transition-transform shadow-sm bg-gradient-to-r from-surface to-background">
+              <div key={i} className="bg-surface/30 px-4 py-3 rounded-xl border-l-2 border-l-warning/50">
                 <p className="text-sm text-textMain font-medium leading-relaxed">{safeString(bb)}</p>
               </div>
             )) : <div className="text-sm text-textDim italic px-2">Evidence insufficient. Research target demographic spending habits.</div>}

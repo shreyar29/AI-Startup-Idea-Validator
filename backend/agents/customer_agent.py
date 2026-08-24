@@ -345,6 +345,17 @@ class CustomerAgent:
         if self.status not in ["failed", "timeout"]:
             self.status = "success"
             
+        # Calculate willingness to pay heuristic
+        willingness_to_pay = {"low": "$0", "expected": "$10/mo", "premium": "$50/mo"}
+        all_text = " ".join([s["insight"].lower() for s in target_customer_segments + pain_points])
+        
+        if "enterprise" in all_text or "b2b" in all_text or "business" in all_text:
+            willingness_to_pay = {"low": "$99/mo", "expected": "$499/mo", "premium": "$2000+/mo"}
+        elif "student" in all_text or "teen" in all_text:
+            willingness_to_pay = {"low": "$0 (Ad-supported)", "expected": "$4.99/mo", "premium": "$12.99/mo"}
+        elif "developer" in all_text or "engineer" in all_text:
+            willingness_to_pay = {"low": "$0 (Open Source)", "expected": "$20/mo", "premium": "$99/mo"}
+
         analysis = {
             "target_customer_segments": target_customer_segments,
             "customer_personas": validated_personas,
@@ -353,6 +364,7 @@ class CustomerAgent:
             "customer_journey": customer_journey,
             "sentiment": validated_sentiment,
             "feature_demand": feature_demand,
+            "willingness_to_pay": willingness_to_pay,
             "customer_validation_metrics": validated_metrics,
             "status": self.status,
             "generated_at": datetime.now(timezone.utc).isoformat()
@@ -370,5 +382,10 @@ class CustomerAgent:
         logger.info(f"CustomerAgent Processing Stats: {stats}")
 
         logger.info("CustomerAgent: Successful completion. Output ready for downstream agents.")
-        self.context["customer_analysis"] = analysis
-        return analysis
+        
+        from contracts.customer_contract import CustomerContract
+        from contracts.validator import SafeContractValidator
+        
+        validated_analysis = SafeContractValidator.validate(CustomerContract, analysis, "customer_agent")
+        self.context["customer_analysis"] = validated_analysis
+        return validated_analysis

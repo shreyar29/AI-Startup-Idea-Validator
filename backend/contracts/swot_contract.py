@@ -7,6 +7,6 @@ class SWOTContract(BaseAgentContract):
     weaknesses: List[Dict[str, Any]] = Field(default_factory=list)
     opportunities: List[Dict[str, Any]] = Field(default_factory=list)
     threats: List[Dict[str, Any]] = Field(default_factory=list)
+    tows_matrix: Dict[str, List[Dict[str, Any]]] = Field(default_factory=lambda: {"so": [], "wo": [], "st": [], "wt": []})
     confidence_score: float = 0.5
     confidence: str = "MEDIUM"
-    source_traceability: List[Dict[str, Any]] = Field(default_factory=list)

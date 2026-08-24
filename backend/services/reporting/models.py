@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Union
 
 class ExecSummary(BaseModel):
     founder_recommendation: Optional[str] = None
@@ -24,12 +24,12 @@ class Market(BaseModel):
 
 class Competitor(BaseModel):
     name: str = "Unknown"
-    strengths: str = "N/A"
-    weaknesses: str = "N/A"
+    strengths: Union[str, List[Any], Any] = "N/A"
+    weaknesses: Union[str, List[Any], Any] = "N/A"
 
 class CompetitorAnalysis(BaseModel):
     competitors: List[Competitor] = Field(default_factory=list)
-    gap_analysis: str = "No gaps identified."
+    gap_analysis: Union[str, List[Any], Any] = "No gaps identified."
 
 class SWOT(BaseModel):
     strengths: List[str] = Field(default_factory=list)
@@ -37,17 +37,29 @@ class SWOT(BaseModel):
     opportunities: List[str] = Field(default_factory=list)
     threats: List[str] = Field(default_factory=list)
 
+class RiskItem(BaseModel):
+    category: str = "General"
+    risk: str = "Unknown Risk"
+    severity: str = "Medium"
+    likelihood: str = "Medium"
+    impact: str = "Medium"
+    mitigation: str = "Further validation is recommended."
+    time_horizon: str = "Medium-term"
+    risk_score: float = 0.0
+
 class Risk(BaseModel):
     top_risks: List[str] = Field(default_factory=list)
-    mitigations: List[str] = Field(default_factory=list)
-    risk_level: str = "Unknown"
+    recommendations: List[str] = Field(default_factory=list)
+    risks: List[RiskItem] = Field(default_factory=list)
+    overall_risk_level: str = "Unknown"
+    overall_risk_score: int = 0
 
 class MVP(BaseModel):
     core_features: List[str] = Field(default_factory=list)
 
 class GTM(BaseModel):
-    launch_channels: List[str] = Field(default_factory=list)
-    acquisition_channels: List[str] = Field(default_factory=list)
+    launch_channels: Union[List[str], List[Any], Any] = Field(default_factory=list)
+    acquisition_channels: Union[List[str], List[Any], Any] = Field(default_factory=list)
 
 class FinalEvaluation(BaseModel):
     executive_summary: Optional[Any] = None
@@ -58,6 +70,10 @@ class FinalEvaluation(BaseModel):
     risk: Risk = Field(default_factory=Risk)
     mvp: MVP = Field(default_factory=MVP)
     gtm: GTM = Field(default_factory=GTM)
+    customer: Dict[str, Any] = Field(default_factory=dict)
+    
+    class Config:
+        extra = "allow"
 
 class ReportContext(BaseModel):
     idea: Dict[str, Any] = Field(default_factory=dict)

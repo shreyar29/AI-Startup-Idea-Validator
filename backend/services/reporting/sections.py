@@ -20,7 +20,7 @@ def build_cover_page(story, styles, report_id, context: ReportContext):
     story.append(Spacer(1, 2.5 * inch))
     story.append(Paragraph("VentureLens", ParagraphStyle('VL', fontName='Helvetica-Bold', fontSize=16, textColor=BRAND_SECONDARY, alignment=1)))
     story.append(Spacer(1, 0.2 * inch))
-    story.append(Paragraph("DUE DILIGENCE & STARTUP INTELLIGENCE", styles['CoverSubtitle']))
+    story.append(Paragraph("STRATEGIC DUE DILIGENCE REPORT", styles['CoverSubtitle']))
     story.append(Spacer(1, 0.5 * inch))
     
     display_idea = (idea_desc[:120] + '...') if len(idea_desc) > 120 else idea_desc
@@ -28,351 +28,245 @@ def build_cover_page(story, styles, report_id, context: ReportContext):
     
     story.append(Spacer(1, 2 * inch))
     story.append(HRFlowable(width="50%", thickness=1, color=BRAND_GRAY, spaceBefore=10, spaceAfter=10, hAlign='CENTER'))
-    story.append(Paragraph(f"Report ID: {report_id}", styles['CoverMeta']))
+    story.append(Paragraph("Prepared by VentureLens AI Consulting Group", styles['CoverMeta']))
     story.append(Paragraph(f"Date: {datetime.now().strftime('%B %d, %Y')}", styles['CoverMeta']))
     story.append(PageBreak())
 
 def build_toc(story, styles):
     story.append(Paragraph("Table of Contents", styles['TOCHeading']))
     sections = [
-        "1. Executive Summary & Dashboard",
-        "2. Startup Viability Scorecard",
-        "3. Market Intelligence",
-        "4. Competitive Landscape",
-        "5. SWOT Analysis",
-        "6. Risk Assessment",
-        "7. Founder Action Plan",
-        "8. Appendix & References"
+        "1. Executive Summary",
+        "2. Startup Score Explanation",
+        "3. Market Insights",
+        "4. Customer Insights",
+        "5. Competitive Landscape",
+        "6. SWOT Interpretation",
+        "7. Risk Analysis",
+        "8. MVP Roadmap",
+        "9. GTM Roadmap",
+        "10. Final Verdict"
     ]
     for s in sections:
         story.append(Paragraph(s, styles['TOCItem']))
     story.append(PageBreak())
 
-def build_executive_dashboard(story, styles, context: ReportContext):
-    eval_data = context.final_evaluation
-    story.append(Paragraph("1. Executive Summary & Dashboard", styles['SectionHeader']))
+def build_consulting_section(story, styles, title, summary, analysis, why_matters, recommendation, risk_level, next_actions):
+    story.append(Paragraph(title, styles['SectionHeader']))
     
-    score_data = eval_data.startup_score
-    overall_score = score_data.overall_score
-    verdict = score_data.verdict
-    
-    score_color = BRAND_SUCCESS if overall_score >= 75 else (BRAND_WARNING if overall_score >= 40 else BRAND_ERROR)
-    
-    # Core KPIs
-    data = [
-        [
-            Paragraph(str(overall_score), ParagraphStyle('Sc', parent=styles['KPIValue'], textColor=score_color, fontSize=28)),
-            Paragraph(safe_str(verdict), ParagraphStyle('Vd', parent=styles['KPIValue'], fontSize=16, textColor=BRAND_PRIMARY)),
-            Paragraph(str(score_data.confidence_level), styles['KPIValue'])
-        ],
-        [
-            Paragraph("OVERALL SCORE (0-100)", styles['KPILabel']),
-            Paragraph("VERDICT", styles['KPILabel']),
-            Paragraph("AI CONFIDENCE", styles['KPILabel'])
-        ]
-    ]
-    t = Table(data, colWidths=[2.2 * inch, 2.6 * inch, 2.2 * inch])
-    t.setStyle(TableStyle([
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+    # Executive Summary Box
+    summ_data = [[Paragraph("<b>Executive Summary</b>", styles['BodyTextBold'])],
+                 [Paragraph(safe_str(summary), styles['BodyText'])]]
+    t_summ = Table(summ_data, colWidths=[7 * inch])
+    t_summ.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), BRAND_LIGHT_GRAY),
-        ('BOX', (0,0), (-1,-1), 1, BRAND_GRAY),
-        ('INNERGRID', (0,0), (-1,-1), 0.25, colors.lightgrey),
-        ('TOPPADDING', (0,0), (-1,-1), 12),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 12),
+        ('BOX', (0,0), (-1,-1), 1, BRAND_SECONDARY),
+        ('PADDING', (0,0), (-1,-1), 12)
     ]))
-    story.append(t)
-    story.append(Spacer(1, 0.4 * inch))
+    story.append(t_summ)
+    story.append(Spacer(1, 0.2 * inch))
     
-    # Extended KPI Dashboard
-    ext_data = [
+    # Analysis
+    story.append(Paragraph("Analysis", styles['SubHeader']))
+    story.append(Paragraph(safe_str(analysis), styles['BodyText']))
+    
+    # Why It Matters
+    story.append(Paragraph("Why It Matters", styles['SubHeader']))
+    story.append(Paragraph(safe_str(why_matters), styles['BodyText']))
+    
+    # Strategic Recommendation
+    story.append(Paragraph("Strategic Recommendation", styles['SubHeader']))
+    story.append(Paragraph(safe_str(recommendation), styles['BodyText']))
+    story.append(Spacer(1, 0.1 * inch))
+    
+    # Scorecard: Risk Level & Next Actions
+    color = BRAND_PRIMARY
+    if "High" in risk_level: color = BRAND_ERROR
+    elif "Medium" in risk_level: color = BRAND_WARNING
+    elif "Low" in risk_level: color = BRAND_SUCCESS
+
+    scorecard_data = [
+        [Paragraph("<b>Risk Level</b>", ParagraphStyle('ScoreH1', parent=styles['BodyTextBold'], textColor=colors.white)), 
+         Paragraph("<b>Next Actions</b>", ParagraphStyle('ScoreH2', parent=styles['BodyTextBold'], textColor=colors.white))],
         [
-            Paragraph(str(score_data.market_score), styles['KPIValue']),
-            Paragraph(str(score_data.competition_score), styles['KPIValue']),
-            Paragraph(str(score_data.execution_score), styles['KPIValue'])
-        ],
-        [
-            Paragraph("MARKET ATTRACTIVENESS", styles['KPILabel']),
-            Paragraph("COMPETITION INTENSITY", styles['KPILabel']),
-            Paragraph("EXECUTION COMPLEXITY", styles['KPILabel'])
+            Paragraph(safe_str(risk_level), ParagraphStyle('ScoreV1', parent=styles['BodyTextBold'], textColor=color)),
+            Paragraph(safe_str(next_actions), styles['BodyText'])
         ]
     ]
-    t2 = Table(ext_data, colWidths=[2.3 * inch, 2.4 * inch, 2.3 * inch])
-    t2.setStyle(TableStyle([
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('BOX', (0,0), (-1,-1), 1, BRAND_GRAY),
-        ('INNERGRID', (0,0), (-1,-1), 0.25, colors.lightgrey),
-        ('TOPPADDING', (0,0), (-1,-1), 10),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 10),
+    t_score = Table(scorecard_data, colWidths=[2 * inch, 5 * inch])
+    t_score.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), BRAND_PRIMARY),
+        ('BOX', (0,0), (-1,-1), 1, BRAND_PRIMARY),
+        ('INNERGRID', (0,0), (-1,-1), 0.25, BRAND_GRAY),
+        ('PADDING', (0,0), (-1,-1), 10),
+        ('VALIGN', (0,0), (-1,-1), 'TOP')
     ]))
-    story.append(t2)
-    story.append(Spacer(1, 0.4 * inch))
-    
-    # Executive Recommendation
-    story.append(Paragraph("Executive Recommendation", styles['SubHeader']))
-    exec_summary = eval_data.executive_summary
-    if isinstance(exec_summary, dict):
-        rec_text = exec_summary.get("founder_recommendation") or exec_summary.get("market_fit") or "Data Unavailable"
-    else:
-        rec_text = str(exec_summary) if exec_summary else "Data Unavailable"
-        
-    story.append(Paragraph(safe_str(rec_text), styles['BodyText']))
-    
-    # Top Opportunities and Risks Summary
-    story.append(Spacer(1, 0.2 * inch))
-    opps = eval_data.swot.opportunities[:2]
-    risks = eval_data.risk.top_risks[:2]
-    
-    if opps or risks:
-        summ_data = [
-            [Paragraph("<b>Top Opportunities</b>", styles['BodyText']), Paragraph("<b>Top Risks</b>", styles['BodyText'])],
-            [
-                Paragraph("<br/>".join([f"• {safe_str(o)}" for o in opps]) if opps else "None identified", styles['BodyText']),
-                Paragraph("<br/>".join([f"• {safe_str(r)}" for r in risks]) if risks else "None identified", styles['BodyText'])
-            ]
-        ]
-        t3 = Table(summ_data, colWidths=[3.5 * inch, 3.5 * inch])
-        t3.setStyle(TableStyle([
-            ('VALIGN', (0,0), (-1,-1), 'TOP'),
-            ('BACKGROUND', (0,0), (0,-1), colors.HexColor("#eff6ff")), # Blue
-            ('BACKGROUND', (1,0), (1,-1), colors.HexColor("#fef2f2")), # Red
-            ('BOX', (0,0), (-1,-1), 1, BRAND_GRAY),
-            ('INNERGRID', (0,0), (-1,-1), 0.25, colors.lightgrey),
-            ('PADDING', (0,0), (-1,-1), 8),
-        ]))
-        story.append(t3)
-    
+    story.append(t_score)
     story.append(PageBreak())
+
+def build_executive_summary(story, styles, context: ReportContext):
+    eval_data = context.final_evaluation
+    score_data = eval_data.startup_score
+    
+    build_consulting_section(
+        story, styles, 
+        title="1. Executive Summary",
+        summary=f"The proposed startup idea has achieved an overall viability score of {score_data.overall_score}/100 with a verdict of '{score_data.verdict}'.",
+        analysis=f"The AI evaluated the market attractiveness ({score_data.market_score}/25), competition intensity ({score_data.competition_score}/25), execution complexity ({score_data.execution_score}/25), and GTM strategy ({score_data.gtm_score}/25).",
+        why_matters="A structured due diligence assessment helps founders avoid building products nobody wants and investors avoid misallocating capital.",
+        recommendation=eval_data.executive_summary if isinstance(eval_data.executive_summary, str) else "Focus on core validation before scaling.",
+        risk_level=f"{eval_data.risk.overall_risk_level} Risk",
+        next_actions="Review the subsequent sections for deep-dive analysis into market, competition, and go-to-market strategies."
+    )
 
 def build_startup_scorecard(story, styles, context: ReportContext):
     score_data = context.final_evaluation.startup_score
-    if not score_data or score_data.market_score == 0:
-        return
-        
-    story.append(Paragraph("2. Startup Viability Scorecard", styles['SectionHeader']))
+    safe_explanations = [e.get("explanation", e.get("reason", str(e))) if isinstance(e, dict) else str(e) for e in score_data.score_explanation] if score_data.score_explanation else []
+    explanations = ", ".join(safe_explanations) if safe_explanations else "No explanations provided."
     
-    d = Drawing(400, 250)
-    chart = SpiderChart()
-    chart.x = 100
-    chart.y = 20
-    chart.width = 200
-    chart.height = 200
-    
-    chart.data = [[
-        score_data.market_score,
-        score_data.competition_score,
-        score_data.execution_score,
-        score_data.risk_score,
-        score_data.gtm_score
-    ]]
-    
-    chart.labels = ['Market', 'Competition', 'Execution', 'Risk (Safety)', 'GTM']
-    chart.strands[0].fillColor = colors.Color(59/255, 130/255, 246/255, alpha=0.3)
-    chart.strands[0].strokeColor = BRAND_SECONDARY
-    chart.strands[0].strokeWidth = 2
-    
-    d.add(chart)
-    story.append(d)
-    story.append(Spacer(1, 0.2 * inch))
-    
-    if score_data.score_explanation:
-        story.append(Paragraph("Score Breakdown", styles['SubHeader']))
-        for exp in score_data.score_explanation:
-            story.append(Paragraph(f"• {safe_str(exp)}", styles['BodyText']))
-            
-    story.append(PageBreak())
+    build_consulting_section(
+        story, styles, 
+        title="2. Startup Score Explanation",
+        summary=f"Score: {score_data.overall_score}/100. Verdict: {score_data.verdict}.",
+        analysis=f"The score breakdown relies on qualitative and quantitative analysis across four pillars. Explanations: {explanations}",
+        why_matters="Understanding the exact drivers of the viability score identifies immediate areas of improvement and funding requirements.",
+        recommendation="Leverage high-scoring areas as unfair advantages when pitching to investors.",
+        risk_level="Medium",
+        next_actions="De-risk low-scoring pillars by running micro-experiments or pivoting the target audience."
+    )
 
-def build_market_intelligence(story, styles, context: ReportContext):
+def build_market_insights(story, styles, context: ReportContext):
     market = context.final_evaluation.market
-    if not market or (not market.market_size and not market.market_trends):
-        return
-        
-    story.append(Paragraph("3. Market Intelligence", styles['SectionHeader']))
+    market_size = market.market_size or "Data Unavailable"
+    safe_trends = [t.get("trend", t.get("name", str(t))) if isinstance(t, dict) else str(t) for t in market.market_trends] if market.market_trends else []
+    trends = ", ".join(safe_trends) if safe_trends else "No clear trends identified."
     
-    data = [
-        [
-            Paragraph(safe_str(market.market_size), styles['KPIValue']),
-            Paragraph(safe_str(market.growth_rate), styles['KPIValue']),
-            Paragraph(safe_str(market.market_maturity), styles['KPIValue'])
-        ],
-        [
-            Paragraph("MARKET SIZE", styles['KPILabel']),
-            Paragraph("GROWTH RATE (CAGR)", styles['KPILabel']),
-            Paragraph("MATURITY", styles['KPILabel'])
-        ]
-    ]
-    
-    t = Table(data, colWidths=[2.3 * inch, 2.4 * inch, 2.3 * inch])
-    t.setStyle(TableStyle([
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('BACKGROUND', (0,0), (-1,-1), BRAND_LIGHT_GRAY),
-        ('BOX', (0,0), (-1,-1), 1, BRAND_GRAY),
-        ('TOPPADDING', (0,0), (-1,-1), 12),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 12),
-    ]))
-    story.append(t)
-    story.append(Spacer(1, 0.4 * inch))
-    
-    if market.market_trends:
-        story.append(Paragraph("Macro Trends & Drivers", styles['SubHeader']))
-        for t_item in market.market_trends:
-            story.append(Paragraph(f"• {safe_str(t_item)}", styles['BodyText']))
-            
-    story.append(PageBreak())
+    build_consulting_section(
+        story, styles, 
+        title="3. Market Insights",
+        summary=f"The market size is estimated at {market_size} with a maturity level of {market.market_maturity}.",
+        analysis=f"The market is experiencing a growth rate of {market.growth_rate}. Key macro trends driving adoption include: {trends}.",
+        why_matters="A rapidly growing or large TAM (Total Addressable Market) is the #1 prerequisite for venture-scale returns.",
+        recommendation="Position the product to capture demand created by the macro trends rather than fighting established paradigms.",
+        risk_level="Low to Medium",
+        next_actions="Conduct bottom-up TAM/SAM/SOM calculations to validate top-down AI estimates."
+    )
 
-def build_competitor_matrix(story, styles, context: ReportContext):
-    comp_analysis = context.final_evaluation.competitor
-    competitors = comp_analysis.competitors
+def build_customer_insights(story, styles, context: ReportContext):
+    customer = context.final_evaluation.customer
+    segments = customer.get("target_customer_segments", [])
+    pain_points = customer.get("pain_points", [])
     
-    if not competitors:
-        return
-        
-    story.append(Paragraph("4. Competitive Landscape", styles['SectionHeader']))
-    story.append(Paragraph("Market Positioning", styles['SubHeader']))
+    safe_segments = [s.get("segment_name", s.get("name", s.get("segment", str(s)))) if isinstance(s, dict) else str(s) for s in segments]
+    safe_pain = [p.get("pain_point", p.get("description", p.get("name", str(p)))) if isinstance(p, dict) else str(p) for p in pain_points]
     
-    table_data = [["Competitor", "Strengths", "Weaknesses"]]
-    for c in competitors[:5]:
-        table_data.append([
-            Paragraph(safe_str(c.name), styles['BodyTextBold']),
-            Paragraph(safe_str(c.strengths), styles['BodyText']),
-            Paragraph(safe_str(c.weaknesses), styles['BodyText'])
-        ])
-        
-    t = Table(table_data, colWidths=[1.5 * inch, 2.75 * inch, 2.75 * inch])
-    t.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), BRAND_PRIMARY),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-        ('ALIGN', (0,0), (-1,0), 'CENTER'),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('BOTTOMPADDING', (0,0), (-1,0), 8),
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('INNERGRID', (0,0), (-1,-1), 0.25, BRAND_GRAY),
-        ('BOX', (0,0), (-1,-1), 1, BRAND_PRIMARY),
-        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, BRAND_LIGHT_GRAY])
-    ]))
-    story.append(t)
-    
-    story.append(Spacer(1, 0.3 * inch))
-    story.append(Paragraph("Market Whitespace (Gap Analysis)", styles['SubHeader']))
-    story.append(Paragraph(safe_str(comp_analysis.gap_analysis), styles['BodyText']))
-    
-    story.append(PageBreak())
+    build_consulting_section(
+        story, styles, 
+        title="4. Customer Insights",
+        summary=f"Targeting {len(segments)} core customer segments experiencing critical pain points.",
+        analysis=f"Primary segments: {', '.join(safe_segments[:3]) if safe_segments else 'Unknown'}. Core pain points: {', '.join(safe_pain[:3]) if safe_pain else 'Unknown'}.",
+        why_matters="Customer obsession is critical. If the pain point is not acute (a 'hair on fire' problem), acquisition costs will outpace lifetime value.",
+        recommendation="Develop targeted buyer personas and tailor messaging specifically to the highest-intent segment first.",
+        risk_level="Medium",
+        next_actions="Conduct 20-30 customer discovery interviews to validate these assumptions."
+    )
 
-def build_swot_matrix(story, styles, context: ReportContext):
+def build_competitive_landscape(story, styles, context: ReportContext):
+    comp = context.final_evaluation.competitor
+    competitors = comp.competitors
+    gap = comp.gap_analysis
+    
+    comp_names = [c.get("name", str(c)) if isinstance(c, dict) else getattr(c, "name", str(c)) for c in competitors] if competitors else []
+    
+    build_consulting_section(
+        story, styles, 
+        title="5. Competitive Landscape",
+        summary=f"The market features established players including {', '.join(comp_names[:3]) if comp_names else 'unknown entities'}.",
+        analysis=f"Competitors typically exhibit strong brand presence but struggle with agility. Market Whitespace (Gap Analysis): {gap}",
+        why_matters="Entering a red ocean requires a 10x better product or a novel distribution advantage.",
+        recommendation="Avoid competing directly on features. Compete on the identified whitespace or target an underserved niche.",
+        risk_level="High",
+        next_actions="Monitor competitor pricing pages and release notes. Build a differentiation matrix."
+    )
+
+def build_swot_interpretation(story, styles, context: ReportContext):
     swot = context.final_evaluation.swot
-    if not swot.strengths and not swot.weaknesses:
-        return
-        
-    story.append(Paragraph("5. SWOT Analysis", styles['SectionHeader']))
     
-    def _get_list_str(items):
-        if not items: return "N/A"
-        return "<br/>• ".join([html.escape(str(i)) for i in items[:4]])
-        
-    data = [
-        [
-            Paragraph(f"<b>STRENGTHS</b><br/><br/>• {_get_list_str(swot.strengths)}", styles['BodyText']),
-            Paragraph(f"<b>WEAKNESSES</b><br/><br/>• {_get_list_str(swot.weaknesses)}", styles['BodyText'])
-        ],
-        [
-            Paragraph(f"<b>OPPORTUNITIES</b><br/><br/>• {_get_list_str(swot.opportunities)}", styles['BodyText']),
-            Paragraph(f"<b>THREATS</b><br/><br/>• {_get_list_str(swot.threats)}", styles['BodyText'])
-        ]
-    ]
-    
-    t = Table(data, colWidths=[3.5 * inch, 3.5 * inch], rowHeights=[3 * inch, 3 * inch])
-    t.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('BOX', (0,0), (-1,-1), 2, BRAND_PRIMARY),
-        ('INNERGRID', (0,0), (-1,-1), 1, BRAND_GRAY),
-        ('BACKGROUND', (0,0), (0,0), colors.HexColor("#f0fdf4")), 
-        ('BACKGROUND', (1,0), (1,0), colors.HexColor("#fef2f2")), 
-        ('BACKGROUND', (0,1), (0,1), colors.HexColor("#eff6ff")), 
-        ('BACKGROUND', (1,1), (1,1), colors.HexColor("#fffbeb")), 
-        ('PADDING', (0,0), (-1,-1), 12),
-    ]))
-    story.append(t)
-    story.append(PageBreak())
+    build_consulting_section(
+        story, styles, 
+        title="6. SWOT Interpretation",
+        summary="A balanced analysis of internal capabilities versus external environmental factors.",
+        analysis=f"Strengths: {len(swot.strengths)}. Weaknesses: {len(swot.weaknesses)}. Opportunities: {len(swot.opportunities)}. Threats: {len(swot.threats)}.",
+        why_matters="SWOT provides a structured framework for strategic planning and resource allocation.",
+        recommendation="Double down on strengths to capture identified opportunities while building defensive moats against threats.",
+        risk_level="Medium",
+        next_actions="Assign ownership to mitigating the top 2 weaknesses."
+    )
 
-def build_risk_assessment(story, styles, context: ReportContext):
+def build_risk_analysis(story, styles, context: ReportContext):
     risk = context.final_evaluation.risk
-    if not risk.top_risks:
-        return
-        
-    story.append(Paragraph("6. Risk Assessment", styles['SectionHeader']))
     
-    story.append(Paragraph(f"Overall Risk Level: <b>{safe_str(risk.risk_level)}</b>", styles['SubHeader']))
-    story.append(Spacer(1, 0.2 * inch))
+    safe_risks = [r.get("risk", r.get("description", str(r))) if isinstance(r, dict) else str(r) for r in risk.top_risks] if risk.top_risks else []
     
-    table_data = [["Critical Risk Factor", "Proposed Mitigation"]]
-    risks = risk.top_risks[:5]
-    mitigations = risk.mitigations[:5]
-    
-    # Pad mitigations to match risks
-    while len(mitigations) < len(risks):
-        mitigations.append("Requires mitigation strategy.")
-        
-    for r, m in zip(risks, mitigations):
-        table_data.append([
-            Paragraph(safe_str(r), styles['BodyText']),
-            Paragraph(safe_str(m), styles['BodyText'])
-        ])
-        
-    t = Table(table_data, colWidths=[3.5 * inch, 3.5 * inch])
-    t.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), BRAND_PRIMARY),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-        ('ALIGN', (0,0), (-1,0), 'CENTER'),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('BOTTOMPADDING', (0,0), (-1,0), 8),
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('INNERGRID', (0,0), (-1,-1), 0.25, BRAND_GRAY),
-        ('BOX', (0,0), (-1,-1), 1, BRAND_PRIMARY),
-        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, BRAND_LIGHT_GRAY])
-    ]))
-    story.append(t)
-    story.append(PageBreak())
+    build_consulting_section(
+        story, styles, 
+        title="7. Risk Analysis",
+        summary=f"Overall risk is classified as {risk.overall_risk_level} with a score of {risk.overall_risk_score}/100.",
+        analysis=f"Top risks include: {', '.join(safe_risks[:3]) if safe_risks else 'Data unavailable'}.",
+        why_matters="Unmitigated risks kill startups. Investors look for founders who proactively identify and manage existential threats.",
+        recommendation="Establish a risk register and implement the AI-suggested mitigation strategies immediately.",
+        risk_level=risk.overall_risk_level,
+        next_actions="Prioritize mitigating the risk with the highest probability and impact."
+    )
 
-def build_action_plan(story, styles, context: ReportContext):
+def build_mvp_roadmap(story, styles, context: ReportContext):
     mvp = context.final_evaluation.mvp
-    gtm = context.final_evaluation.gtm
     
-    if not mvp.core_features and not gtm.launch_channels:
-        return
-        
-    story.append(Paragraph("7. Founder Action Plan", styles['SectionHeader']))
+    safe_features = [f.get("feature", f.get("name", str(f))) if isinstance(f, dict) else str(f) for f in mvp.core_features] if mvp.core_features else []
     
-    if mvp.core_features:
-        story.append(Paragraph("MVP Roadmap", styles['SubHeader']))
-        for f in mvp.core_features:
-            story.append(Paragraph(f"• [PRIORITY] {safe_str(f)}", styles['BodyText']))
-        story.append(Spacer(1, 0.2 * inch))
-        
-    channels = gtm.acquisition_channels or gtm.launch_channels
-    if channels:
-        story.append(Paragraph("Go-To-Market Strategy (0-90 Days)", styles['SubHeader']))
-        for c in channels:
-            story.append(Paragraph(f"• {safe_str(c)}", styles['BodyText']))
-            
-    story.append(PageBreak())
+    build_consulting_section(
+        story, styles, 
+        title="8. MVP Roadmap",
+        summary=f"The Minimum Viable Product requires {len(mvp.core_features)} core features for successful market entry.",
+        analysis=f"Core requirements: {', '.join(safe_features[:4]) if safe_features else 'Data unavailable'}.",
+        why_matters="Overbuilding the MVP burns runway. The goal is to build the minimum feature set required to validate the core hypothesis.",
+        recommendation="Strictly adhere to the core features list. Defer all 'nice-to-have' features to post-launch iterations.",
+        risk_level="Low",
+        next_actions="Create a wireframe and user flow. Seek feedback before writing code."
+    )
 
-def build_appendix(story, styles, raw_context_dict: dict):
-    story.append(Paragraph("8. Appendix & References", styles['SectionHeader']))
-    story.append(Paragraph("Sources utilized for this report's intelligence generation.", styles['BodyText']))
-    story.append(Spacer(1, 0.2 * inch))
+def build_gtm_roadmap(story, styles, context: ReportContext):
+    gtm = context.final_evaluation.gtm
+    channels = gtm.acquisition_channels or gtm.launch_channels
     
-    evidence = set()
-    for k, v in raw_context_dict.items():
-        if isinstance(v, dict):
-            ev = v.get("evidence", [])
-            if isinstance(ev, list):
-                for e in ev:
-                    if isinstance(e, str) and e.startswith("http"):
-                        evidence.add(e)
-                        
-    if evidence:
-        for i, e in enumerate(sorted(list(evidence))):
-            story.append(Paragraph(f"[{i+1}] {html.escape(e)}", styles['BodyText']))
-    else:
-        story.append(Paragraph("No external sources cited.", styles['DataUnavailable']))
+    # Safely extract string if channel is a dict
+    channel_strs = []
+    for c in channels:
+        if isinstance(c, dict):
+            channel_strs.append(c.get('channel') or c.get('name') or str(c))
+        else:
+            channel_strs.append(str(c))
+            
+    build_consulting_section(
+        story, styles, 
+        title="9. GTM Roadmap",
+        summary="A targeted Go-To-Market strategy is required to achieve initial traction and lower CAC.",
+        analysis=f"Primary acquisition channels: {', '.join(channel_strs[:3]) if channel_strs else 'Direct outreach'}.",
+        why_matters="Distribution is often more critical than product. First-time founders focus on product; second-time founders focus on distribution.",
+        recommendation="Test 2-3 channels simultaneously with small budgets, then double down on the channel with the lowest CAC.",
+        risk_level="High",
+        next_actions="Launch a landing page to collect waitlist emails using the primary acquisition channel."
+    )
+
+def build_final_verdict(story, styles, context: ReportContext):
+    score_data = context.final_evaluation.startup_score
+    
+    build_consulting_section(
+        story, styles, 
+        title="10. Final Verdict",
+        summary=f"Final Assessment: {score_data.verdict}",
+        analysis="Based on the synthesis of market intelligence, competitive whitespace, and execution complexity, the venture presents a defined risk-reward profile.",
+        why_matters="Investors need a clear, unequivocal recommendation on viability.",
+        recommendation="Proceed with the recommended Next Actions to de-risk the venture and improve the overall viability score.",
+        risk_level=context.final_evaluation.risk.overall_risk_level,
+        next_actions="Schedule a co-founder alignment meeting to review this report and assign execution tasks."
+    )

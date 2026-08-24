@@ -1,5 +1,5 @@
 import React, { Suspense, useEffect } from 'react';
-import { Routes, Route, useLocation, Link } from 'react-router-dom';
+import { Routes, Route, useLocation, Link, BrowserRouter as Router, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import ErrorState from './components/ErrorState';
@@ -10,7 +10,19 @@ const Dashboard = React.lazy(() => import('./pages/Dashboard'));
 const Login = React.lazy(() => import('./pages/Login'));
 const Signup = React.lazy(() => import('./pages/Signup'));
 const History = React.lazy(() => import('./pages/History'));
+const Workspace = React.lazy(() => import('./pages/Workspace'));
 const VeraWorkspace = React.lazy(() => import('./pages/VeraWorkspace'));
+
+// Agent Workspaces
+const SummaryPage = React.lazy(() => import('./pages/report/Summary'));
+const ResearchPage = React.lazy(() => import('./pages/report/Research'));
+const MarketPage = React.lazy(() => import('./pages/report/Market'));
+const CustomerPage = React.lazy(() => import('./pages/report/Customer'));
+const CompetitorPage = React.lazy(() => import('./pages/report/Competitor'));
+const RiskPage = React.lazy(() => import('./pages/report/Risk'));
+const SWOTPage = React.lazy(() => import('./pages/report/SWOT'));
+const MVPPage = React.lazy(() => import('./pages/report/MVP'));
+const GTMPage = React.lazy(() => import('./pages/report/GTM'));
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -33,11 +45,8 @@ class ErrorBoundary extends React.Component {
   }
   
   componentDidCatch(error, errorInfo) {
-    // Safe error tracking for future telemetry
     console.error("[ErrorBoundary] React component tree crashed.");
     console.error("Reason:", error?.name || 'Unknown', error?.message);
-    
-    // Log the component stack trace for diagnostics only in DEV
     if (import.meta.env.DEV) {
       console.debug("[ErrorBoundary] Component Stack:", errorInfo?.componentStack);
     }
@@ -80,9 +89,8 @@ const LoadingFallback = () => (
   </div>
 );
 
-function App() {
+function AppRoutes() {
   const location = useLocation();
-
   return (
     <div className="flex flex-col min-h-screen bg-background text-textMain relative">
       <ScrollToTop />
@@ -93,9 +101,22 @@ function App() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/report/:reportId" element={<Dashboard />} />
+              
+              {/* Report Sub-Workspaces */}
+              <Route path="/report/:reportId/summary" element={<SummaryPage />} />
+              <Route path="/report/:reportId/research" element={<ResearchPage />} />
+              <Route path="/report/:reportId/market" element={<MarketPage />} />
+              <Route path="/report/:reportId/customer" element={<CustomerPage />} />
+              <Route path="/report/:reportId/competitor" element={<CompetitorPage />} />
+              <Route path="/report/:reportId/risk" element={<RiskPage />} />
+              <Route path="/report/:reportId/swot" element={<SWOTPage />} />
+              <Route path="/report/:reportId/mvp" element={<MVPPage />} />
+              <Route path="/report/:reportId/gtm" element={<GTMPage />} />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
               <Route path="/history" element={<History />} />
+              <Route path="/workspace" element={<Workspace />} />
               <Route path="/vera" element={<VeraWorkspace />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
@@ -106,6 +127,10 @@ function App() {
       <Footer />
     </div>
   );
+}
+
+function App() {
+  return <AppRoutes />;
 }
 
 export default App;

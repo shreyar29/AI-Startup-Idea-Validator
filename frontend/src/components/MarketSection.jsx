@@ -73,58 +73,78 @@ const MarketSection = ({ data }) => {
         </div>
       </div>
 
-      {/* 3: KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
-        <div className="glass-panel p-6 rounded-2xl border-border/50 hover:bg-surface transition-colors flex flex-col h-auto min-h-[8rem]">
-          <div className="text-textMuted text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
-            <PieChartIcon className="w-4 h-4 text-primary"/> Market Size
-          </div>
-          <div className="text-2xl md:text-3xl font-bold text-textMain leading-tight mt-auto line-clamp-3 break-words" title={data.market_size}>
-            {data.market_size === 'Insufficient verified evidence.' ? 'Evidence insufficient. Conduct industry research.' : (data.market_size || 'Unknown')}
-          </div>
-        </div>
-        
-        <div className="glass-panel p-6 rounded-2xl border-border/50 hover:bg-surface transition-colors relative overflow-hidden flex flex-col h-auto min-h-[8rem]">
-          <div className="text-textMuted text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2 z-10">
-            <TrendingUp className="w-4 h-4 text-success"/> Growth Rate
-          </div>
-          <div className="text-2xl md:text-3xl font-bold text-success leading-tight mt-auto z-10 line-clamp-3 break-words" title={data.growth_rate}>
-            {data.growth_rate === 'Insufficient verified evidence.' ? 'Evidence insufficient. Validate assumptions.' : (data.growth_rate || 'Unknown')}
-          </div>
-          {growthNum > 0 && (
-            <div className="absolute inset-0 pt-16 px-4 opacity-20 pointer-events-none" aria-hidden="true">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData}>
-                  <Bar dataKey="value" radius={[8, 8, 0, 0]}>
-                    <Cell fill="#22C55E" />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+      {/* 3: KPI Cards and Market Funnel */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Left Side: Growth & Maturity */}
+        <div className="flex flex-col gap-6">
+          <div className="glass-panel p-6 rounded-2xl border-border/50 hover:bg-surface transition-colors relative overflow-hidden flex flex-col h-auto min-h-[8rem]">
+            <div className="text-textMuted text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2 z-10">
+              <TrendingUp className="w-4 h-4 text-success"/> Growth Rate
             </div>
-          )}
-        </div>
-
-        <div className="glass-panel p-6 rounded-2xl border-border/50 hover:bg-surface transition-colors flex flex-col h-auto min-h-[8rem]">
-          <div className="text-textMuted text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
-            <Target className="w-4 h-4 text-warning"/> Market Maturity
+            <div className="text-3xl font-bold text-success leading-tight mt-auto z-10" title={data.growth_rate}>
+              {data.growth_rate === 'Insufficient verified evidence.' ? 'Evidence insufficient' : (data.growth_rate || 'Unknown')}
+            </div>
+            {growthNum > 0 && (
+              <div className="absolute inset-0 pt-16 px-4 opacity-20 pointer-events-none" aria-hidden="true">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData}>
+                    <Bar dataKey="value" radius={[8, 8, 0, 0]}>
+                      <Cell fill="#22C55E" />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </div>
-          <div className="text-2xl md:text-3xl font-bold text-textMain leading-tight capitalize mt-auto line-clamp-3 break-words" title={data.market_maturity}>
-            {data.market_maturity === 'Insufficient verified evidence.' ? 'Evidence insufficient. Assess market lifecycle.' : (data.market_maturity || 'Unknown')}
-          </div>
-        </div>
 
-
-
-        {data.opportunity_score !== undefined && (
           <div className="glass-panel p-6 rounded-2xl border-border/50 hover:bg-surface transition-colors flex flex-col h-auto min-h-[8rem]">
             <div className="text-textMuted text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
-              <Activity className="w-4 h-4 text-primary"/> Opportunity Score
+              <Target className="w-4 h-4 text-warning"/> Market Maturity
             </div>
-            <div className="text-2xl md:text-3xl font-bold text-primary leading-tight mt-auto line-clamp-3 break-words">
-              {data.opportunity_score}/100
+            <div className="text-2xl font-bold text-textMain leading-tight capitalize mt-auto" title={data.market_maturity}>
+              {data.market_maturity === 'Insufficient verified evidence.' ? 'Evidence insufficient' : (data.market_maturity || 'Unknown')}
             </div>
           </div>
-        )}
+        </div>
+
+        {/* Right Side: Market Funnel */}
+        <div className="glass-panel p-6 rounded-2xl border-border/50 bg-gradient-to-br from-surface to-background flex flex-col">
+          <div className="text-textMuted text-xs font-bold uppercase tracking-widest mb-6 flex items-center justify-between">
+            <span className="flex items-center gap-2"><PieChartIcon className="w-4 h-4 text-primary"/> Market Funnel</span>
+            <span className="text-[10px] bg-primary/10 text-primary px-2 py-1 rounded-md cursor-pointer hover:bg-primary/20 transition-colors" title={data.methodology || "No methodology available"}>
+              Methodology
+            </span>
+          </div>
+          
+          <div className="flex flex-col gap-4 mt-auto">
+            {/* TAM */}
+            <div className="relative p-4 rounded-xl border border-primary/30 bg-primary/5 flex justify-between items-center overflow-hidden">
+              <div className="absolute left-0 top-0 bottom-0 w-2 bg-primary/80"></div>
+              <div className="pl-3">
+                <div className="text-[10px] text-primary font-bold uppercase tracking-wider mb-1">Total Addressable Market (TAM)</div>
+                <div className="text-xl md:text-2xl font-black text-textMain">{data.tam === 'Unknown' ? data.market_size || 'Unknown' : data.tam}</div>
+              </div>
+            </div>
+
+            {/* SAM */}
+            <div className="relative p-4 rounded-xl border border-success/30 bg-success/5 flex justify-between items-center overflow-hidden mx-4">
+              <div className="absolute left-0 top-0 bottom-0 w-2 bg-success/80"></div>
+              <div className="pl-3">
+                <div className="text-[10px] text-success font-bold uppercase tracking-wider mb-1">Serviceable Available Market (SAM)</div>
+                <div className="text-lg md:text-xl font-bold text-textMain">{data.sam || 'Unknown'}</div>
+              </div>
+            </div>
+
+            {/* SOM */}
+            <div className="relative p-4 rounded-xl border border-warning/30 bg-warning/5 flex justify-between items-center overflow-hidden mx-8">
+              <div className="absolute left-0 top-0 bottom-0 w-2 bg-warning/80"></div>
+              <div className="pl-3">
+                <div className="text-[10px] text-warning font-bold uppercase tracking-wider mb-1">Serviceable Obtainable Market (SOM)</div>
+                <div className="text-md md:text-lg font-bold text-textMain">{data.som || 'Unknown'}</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* 4: Market Trends (Engaging Trend Cards) */}

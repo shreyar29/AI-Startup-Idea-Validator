@@ -24,21 +24,22 @@ class PDFExporter:
             "idea": {"description": report_data.get('startup_idea', 'Unknown')},
             "final_evaluation": {
                 "startup_score": payload.get('startup_score_agent', {}),
-                "market": payload.get('market_analysis', {}),
+                "market": payload.get('market_agent', {}),
+                "customer": payload.get('customer_agent', {}),
                 "competitor": {
-                    "competitors": payload.get('competitor_analysis', {}).get('competitors', []),
-                    "gap_analysis": payload.get('competitor_analysis', {}).get('gap_analysis', 'No gaps identified.')
+                    "competitors": payload.get('competitor_agent', {}).get('competitors', []),
+                    "gap_analysis": payload.get('competitor_agent', {}).get('gap_analysis', 'No gaps identified.')
                 },
                 "swot": {
-                    "strengths": [s if isinstance(s, str) else s.get('title', '') for s in payload.get('swot_analysis', {}).get('strengths', [])],
-                    "weaknesses": [s if isinstance(s, str) else s.get('title', '') for s in payload.get('swot_analysis', {}).get('weaknesses', [])],
-                    "opportunities": [s if isinstance(s, str) else s.get('title', '') for s in payload.get('swot_analysis', {}).get('opportunities', [])],
-                    "threats": [s if isinstance(s, str) else s.get('title', '') for s in payload.get('swot_analysis', {}).get('threats', [])]
+                    "strengths": [s.get('insight', s.get('title', str(s))) if isinstance(s, dict) else s for s in payload.get('swot_agent', {}).get('strengths', [])],
+                    "weaknesses": [s.get('insight', s.get('title', str(s))) if isinstance(s, dict) else s for s in payload.get('swot_agent', {}).get('weaknesses', [])],
+                    "opportunities": [s.get('insight', s.get('title', str(s))) if isinstance(s, dict) else s for s in payload.get('swot_agent', {}).get('opportunities', [])],
+                    "threats": [s.get('insight', s.get('title', str(s))) if isinstance(s, dict) else s for s in payload.get('swot_agent', {}).get('threats', [])]
                 },
-                "risk": payload.get('risk_analysis', {}),
-                "mvp": {"core_features": [f.get('feature', '') if isinstance(f, dict) else f for f in payload.get('gtm_analysis', {}).get('mvp_features', [])]},
-                "gtm": payload.get('gtm_analysis', {}),
-                "executive_summary": payload.get('startup_score_agent', {}).get('executive_summary', '')
+                "risk": payload.get('risk_agent', {}),
+                "mvp": {"core_features": [f.get('feature', '') if isinstance(f, dict) else f for f in payload.get('gtm_agent', {}).get('mvp_features', [])]},
+                "gtm": payload.get('gtm_agent', {}),
+                "executive_summary": payload.get('startup_score_agent', {}).get('executive_summary', {})
             }
         }
         

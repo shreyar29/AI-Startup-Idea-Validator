@@ -10,4 +10,3 @@ class MVPContract(BaseAgentContract):
     estimated_complexity: str = "Medium"
     confidence_score: float = 0.5
     confidence: str = "MEDIUM"
-    source_traceability: List[Dict[str, Any]] = Field(default_factory=list)

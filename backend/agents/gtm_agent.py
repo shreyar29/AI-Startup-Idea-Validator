@@ -280,6 +280,35 @@ Evidence Payload:
         if len(acquisition_channels) >= 2: gtm_score += 15
         if target_segment.get("segment"): gtm_score += 15
         gtm_score = max(0, min(100, gtm_score))
+        
+        # Calculate dynamic CAC vs LTV visualizations based on inferred pricing models
+        customer_analysis = self._get_previous_analysis("customer_analysis")
+        willingness_to_pay = customer_analysis.get("willingness_to_pay", {})
+        
+        expected_price_str = willingness_to_pay.get("expected", "$10/mo")
+        # Extract numeric value for LTV calculation
+        price_val = 10
+        import re
+        match = re.search(r'\$?(\d+)', expected_price_str)
+        if match:
+            price_val = int(match.group(1))
+            
+        is_monthly = "mo" in expected_price_str.lower()
+        
+        # Heuristic LTV (Assume 12 month lifespan if monthly, 3 years if annual)
+        ltv = price_val * 12 if is_monthly else price_val * 3
+        
+        # Heuristic CAC based on CAC risk
+        if cac_risk == "Low": cac = ltv * 0.15
+        elif cac_risk == "Medium": cac = ltv * 0.33
+        else: cac = ltv * 0.6
+        
+        cac = round(cac)
+        ltv = round(ltv)
+        
+        # Set a minimum floor
+        if cac < 5: cac = 5
+        if ltv < 15: ltv = 15
 
         # Evidence-Quality Confidence Score
         total_evidence = len(target_segment.get("evidence", [])) + len(pricing_strategy.get("evidence", []))
@@ -305,6 +334,14 @@ Evidence Payload:
             "first_30_days": [str(x) for x in raw_action.get("first_30_days", [])][:3],
             "first_90_days": [str(x) for x in raw_action.get("first_90_days", [])][:3]
         }
+        
+        # Format Funnel Pipeline array for the UI
+        funnel_pipeline = [
+            {"stage": "Awareness", "channels": launch_channels[:2], "conversion_rate": "2-5%"},
+            {"stage": "Acquisition", "tactics": ["Landing Page", "Lead Magnet"], "conversion_rate": "10-20%"},
+            {"stage": "Activation", "tactics": ["Onboarding", "Free Trial"], "conversion_rate": "30-50%"},
+            {"stage": "Revenue", "metrics": {"cac": f"${cac}", "ltv": f"${ltv}"}}
+        ]
 
         analysis = {
             "target_segment": target_segment,
@@ -320,12 +357,18 @@ Evidence Payload:
             "launch_channels": launch_channels,
             "growth_hacks": growth_hacks,
             "launch_plan": action_plan.get("first_30_days", []) + action_plan.get("first_90_days", []),
+            "funnel_pipeline": funnel_pipeline,
+            "cac_ltv_metrics": {"cac": cac, "ltv": ltv},
             "failure_reason": None,
             "status": "success",
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
-        self.context["gtm_analysis"] = analysis
-
         logger.info(f"{log_prefix} GTM Analysis Complete. CAC Risk: {cac_risk}, GTM Score: {gtm_score}/100")
-        return analysis
+        
+        from contracts.gtm_contract import GTMContract
+        from contracts.validator import SafeContractValidator
+        
+        validated_analysis = SafeContractValidator.validate(GTMContract, analysis, "gtm_agent")
+        self.context["gtm_analysis"] = validated_analysis
+        return validated_analysis

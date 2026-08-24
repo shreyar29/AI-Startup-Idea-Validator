@@ -111,6 +111,7 @@ class SWOTAgent:
             "weaknesses": [],
             "opportunities": [],
             "threats": [],
+            "tows_matrix": {"so": [], "wo": [], "st": [], "wt": []},
             "confidence": "Low",
             "failure_reason": reason,
             "status": "degraded" if "Insufficient" in reason else self.status,
@@ -176,6 +177,18 @@ class SWOTAgent:
             "evidence": evidence
         }
 
+    def _validate_tows_item(self, item: Any) -> dict | None:
+        """Validates a TOWS matrix action item."""
+        if not isinstance(item, dict):
+            return None
+        action = str(item.get("action") or "").strip()
+        if not action:
+            return None
+        impact = str(item.get("impact") or "Medium").strip().title()
+        if impact not in ["Low", "Medium", "High", "Critical"]:
+            impact = "Medium"
+        return {"action": action, "impact": impact}
+
     async def analyze(self, log_prefix: str = "SWOTAgent:"):
         """Main SWOT Agent entry point."""
         logger.info(f"{log_prefix} Execution started.")
@@ -198,8 +211,13 @@ Analyze the Strengths, Weaknesses, Opportunities, and Threats (SWOT) of the star
 1. Generate Opportunities explicitly from: market growth, customer pain points, and competitor gaps.
 2. Generate Threats explicitly from: critical risks, competitor threats, and market maturity.
 3. For EVERY item across the four quadrants, provide the exact 'insight', determine its 'impact' (Low, Medium, High, Critical), and cite specific 'evidence' strings from the payload.
-4. Generate a concise 'executive_summary' synthesizing the overall market position.
-5. Generate a 'strategic_recommendation' advising the founders on their immediate next steps.
+4. Generate a TOWS matrix. Provide exactly 2 actionable strategies for each intersection:
+   - "so" (Strengths-Opportunities): Use strengths to maximize opportunities.
+   - "wo" (Weaknesses-Opportunities): Improve weaknesses by taking advantage of opportunities.
+   - "st" (Strengths-Threats): Use strengths to minimize threats.
+   - "wt" (Weaknesses-Threats): Defensive strategies to minimize weaknesses and avoid threats.
+5. Generate a concise 'executive_summary' synthesizing the overall market position.
+6. Generate a 'strategic_recommendation' advising the founders on their immediate next steps.
 
 Do not invent facts that are not supported by the evidence.
 
@@ -218,7 +236,13 @@ Return ONLY valid JSON with exactly this structure:
     ],
     "threats": [
         {{"insight": "string", "impact": "Critical", "evidence": ["string"]}}
-    ]
+    ],
+    "tows_matrix": {{
+        "so": [{{"action": "string", "impact": "High"}}],
+        "wo": [{{"action": "string", "impact": "Medium"}}],
+        "st": [{{"action": "string", "impact": "High"}}],
+        "wt": [{{"action": "string", "impact": "High"}}]
+    }}
 }}
 
 Evidence:
@@ -282,6 +306,19 @@ Evidence:
             items.sort(key=lambda x: impact_weights.get(x["impact"], 0), reverse=True)
             validated_swot[quad] = items
 
+        # Validate TOWS matrix
+        tows_matrix = {"so": [], "wo": [], "st": [], "wt": []}
+        raw_tows = parsed_analysis.get("tows_matrix", {})
+        if isinstance(raw_tows, dict):
+            for t_quad in ["so", "wo", "st", "wt"]:
+                t_items = []
+                for t_item in raw_tows.get(t_quad, []):
+                    valid_t = self._validate_tows_item(t_item)
+                    if valid_t:
+                        t_items.append(valid_t)
+                t_items.sort(key=lambda x: impact_weights.get(x["impact"], 0), reverse=True)
+                tows_matrix[t_quad] = t_items
+
         # Evidence-Quality Confidence Scoring
         if total_items > 0:
             evidence_ratio = total_evidence_count / total_items
@@ -304,6 +341,7 @@ Evidence:
             "weaknesses": validated_swot["weaknesses"],
             "opportunities": validated_swot["opportunities"],
             "threats": validated_swot["threats"],
+            "tows_matrix": tows_matrix,
             "confidence": confidence,
             "failure_reason": None,
             "status": "success",

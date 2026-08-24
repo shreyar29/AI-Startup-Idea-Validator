@@ -228,23 +228,59 @@ const OverviewSection = ({ metadata, finalEval }) => {
           </div>
         </div>
         
+        
         {scoringBreakdown && Object.keys(scoringBreakdown).length > 0 && (
-          <div className="mt-6 bg-surface/20 p-6 rounded-2xl border border-border/30">
-            <h3 className="text-sm font-bold text-textMuted uppercase tracking-widest mb-4">Transparent Scoring Breakdown</h3>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="mt-8">
+            <h3 className="text-sm font-bold text-textMuted uppercase tracking-widest mb-4 flex items-center gap-2">
+              <Activity className="w-4 h-4" /> Score Driver Panel
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               {Object.entries(scoringBreakdown).map(([key, value]) => {
                 const displayValue = typeof value === 'object' && value !== null 
                   ? (value.score || value.value || String(Object.values(value)[0] || ''))
                   : String(value);
+                  
+                const numValue = Number(displayValue);
+                const color = getScoreColor(numValue);
+                
+                // Find matching explanation
+                let explanation = `Score for ${key}`;
+                if (startupScore.score_explanation && Array.isArray(startupScore.score_explanation)) {
+                  const match = startupScore.score_explanation.find(e => e.toLowerCase().includes(key.toLowerCase()));
+                  if (match) explanation = match;
+                }
                 
                 return (
-                  <div key={key} className="glass-panel p-4 rounded-xl flex flex-col justify-center items-center text-center">
-                    <span className="text-[10px] uppercase font-bold tracking-widest text-textMuted mb-2">{key}</span>
-                    <span className="text-xl font-bold text-textMain">{displayValue}</span>
+                  <div key={key} className="glass-panel p-4 rounded-xl flex flex-col justify-between items-center text-center relative group hover:border-white/20 transition-all cursor-pointer">
+                    <span className="text-[10px] uppercase font-bold tracking-widest text-textMuted mb-3">{key}</span>
+                    <div className="relative">
+                      <svg className="w-16 h-16 transform -rotate-90">
+                        <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" fill="transparent" className="text-surface border-border" />
+                        <circle cx="32" cy="32" r="28" stroke={color} strokeWidth="4" fill="transparent" strokeDasharray={175} strokeDashoffset={175 - (175 * numValue) / 100} className="transition-all duration-1000 ease-out" />
+                      </svg>
+                      <span className="absolute inset-0 flex items-center justify-center text-lg font-bold" style={{color}}>{displayValue}</span>
+                    </div>
+                    
+                    {/* Tooltip */}
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 p-3 bg-surface border border-border/50 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-20 pointer-events-none">
+                      <p className="text-xs text-textMain leading-relaxed font-medium">{explanation}</p>
+                    </div>
                   </div>
                 );
               })}
             </div>
+            
+            {/* Dynamic Adjustments */}
+            {startupScore.score_explanation && Array.isArray(startupScore.score_explanation) && (
+              <div className="mt-4 flex flex-col gap-2">
+                {startupScore.score_explanation.filter(e => e.includes("Dynamic Adjustment")).map((adj, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs text-primary/80 bg-primary/5 p-2 rounded-lg border border-primary/10">
+                    <ShieldCheck className="w-4 h-4 shrink-0" />
+                    <span>{adj}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

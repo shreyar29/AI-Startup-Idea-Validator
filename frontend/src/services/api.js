@@ -87,6 +87,21 @@ export const validateIdea = async (idea, onStart, signal) => {
   }
 };
 
+export const getReportById = async (reportId, signal) => {
+  try {
+    const response = await api.get(`/validation/${reportId}/result`, { signal });
+    if (response.data.status === 'success' || response.data.result) {
+      return response.data.result;
+    }
+    throw new Error('Report not found or not finished.');
+  } catch (error) {
+    if (axios.isCancel(error) || error.message === 'Request was cancelled') {
+      throw new Error('Request was cancelled.');
+    }
+    throw error;
+  }
+};
+
 export const saveToHistory = async (userId, idea, resultData) => {
   try {
     const response = await api.post('/history', {
@@ -99,6 +114,34 @@ export const saveToHistory = async (userId, idea, resultData) => {
     console.error('Failed to save to history via API:', error.message);
     throw error;
   }
+};
+
+// --- WORKSPACE APIs ---
+export const getProjects = async () => {
+  const response = await api.get('/api/workspace/projects');
+  return response.data;
+};
+
+export const createProject = async (name, description, reportId) => {
+  const response = await api.post('/api/workspace/projects', {
+    name, description, report_id: reportId
+  });
+  return response.data;
+};
+
+export const createTask = async (taskData) => {
+  const response = await api.post('/api/workspace/tasks', taskData);
+  return response.data;
+};
+
+export const getTasks = async (projectId) => {
+  const response = await api.get(`/api/workspace/projects/${projectId}/tasks`);
+  return response.data;
+};
+
+export const updateTask = async (taskId, updates) => {
+  const response = await api.patch(`/api/workspace/tasks/${taskId}`, updates);
+  return response.data;
 };
 
 export default api;

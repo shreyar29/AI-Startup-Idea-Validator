@@ -367,7 +367,7 @@ class CompetitorAgent:
             competitor_map[name_lower] = valid_comp
             validated_competitors.append(valid_comp)
         
-        # Threat Score & Ranking
+        # Threat Score & Ranking & Moat Score & Positioning
         for comp in validated_competitors:
             overlap = len(comp["features"]) * 5 + len(comp["strengths"]) * 3
             if len(comp["source_references"]) > 1: overlap += 15
@@ -381,6 +381,34 @@ class CompetitorAgent:
                 overlap += 10
                 
             comp["threat_score"] = min(100, max(0, overlap))
+            
+            # Calculate Moat Score heuristics (Technology, Brand, Distribution, Execution)
+            tech = min(100, 40 + len(comp["features"]) * 10)
+            brand = min(100, 30 + len(comp["source_references"]) * 15)
+            dist = min(100, 50 + (20 if comp["business_model"] in ["B2B/Enterprise", "SaaS"] else 0))
+            exec_score = min(100, 60 + len(comp["strengths"]) * 5 - len(comp["weaknesses"]) * 5)
+            
+            comp["moat_score"] = {
+                "technology": tech,
+                "brand": brand,
+                "distribution": dist,
+                "execution": exec_score
+            }
+
+            # Positioning X/Y (Price vs Value) heuristics
+            px = 50 # Default Price (X)
+            py = 50 # Default Value (Y)
+            
+            p_text = comp["pricing"].lower()
+            if "free" in p_text or "0" in p_text: px = 10
+            elif "enterprise" in p_text or "custom" in p_text: px = 90
+            elif "$" in p_text:
+                px = min(80, max(20, 20 + len(p_text)*5))
+                
+            py = min(90, max(10, 30 + (comp["threat_score"] / 2)))
+            
+            comp["position_x"] = px
+            comp["position_y"] = py
             
         validated_competitors.sort(key=lambda x: x["threat_score"], reverse=True)
         for i, comp in enumerate(validated_competitors):
@@ -416,8 +444,13 @@ class CompetitorAgent:
         }
 
         logger.info("CompetitorAgent: Successful completion. Output ready for downstream agents.")
-        self.context["competitor_analysis"] = analysis
-        return analysis
+        
+        from contracts.competitor_contract import CompetitorContract
+        from contracts.validator import SafeContractValidator
+        
+        validated_analysis = SafeContractValidator.validate(CompetitorContract, analysis, "competitor_agent")
+        self.context["competitor_analysis"] = validated_analysis
+        return validated_analysis
 
     def _generate_gap_analysis(self, competitors: list) -> list:
         if not competitors:

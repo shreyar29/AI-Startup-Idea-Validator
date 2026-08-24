@@ -35,11 +35,11 @@ try:
     from api.dashboard_routes import router as dashboard_router
     from api.workspace_routes import router as workspace_router
     from api.metrics_routes import router as metrics_router
+    from api.simulator_routes import router as simulator_router
     HAS_ENTERPRISE_API = True
 except ImportError as e:
     HAS_ENTERPRISE_API = False
 from utils.logger import get_logger
-from db import init_db
 
 logger = get_logger(__name__)
 
@@ -60,9 +60,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Startup configuration validation failed: {str(e)}")
         raise RuntimeError(f"Startup validation failed: {str(e)}") from e
-
-    init_db()
-    
+        
     # Start ProgressManager cleanup task
     from utils.progress import ProgressManager
     async def cleanup_task():
@@ -217,6 +215,7 @@ if HAS_ENTERPRISE_API:
     app.include_router(dashboard_router)
     app.include_router(workspace_router)
     app.include_router(metrics_router)
+    app.include_router(simulator_router)
 
 
 

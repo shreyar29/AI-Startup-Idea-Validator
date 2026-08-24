@@ -12,6 +12,10 @@ import {
   Activity, 
   Flag 
 } from 'lucide-react';
+import { 
+  ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
+  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Cell
+} from 'recharts';
 
 const CompetitorSection = ({ data }) => {
   const validCompetitors = (data?.competitors || []).filter(c => {
@@ -92,58 +96,65 @@ const CompetitorSection = ({ data }) => {
         </div>
       </div>
 
-      {/* 2.5: Competitor Battlecard Matrix */}
-      <div className="space-y-6 pt-4">
-        <h3 className="text-[10px] font-bold text-textMuted uppercase tracking-widest flex items-center gap-2 border-b border-border/30 pb-3">
-          <Activity className="w-3.5 h-3.5 text-vera-cyan" /> Competitor Battlecard
-        </h3>
-        <div className="overflow-x-auto w-full pb-4">
-          <table className="w-full text-left border-collapse min-w-[800px]">
-            <thead>
-              <tr>
-                <th className="p-4 bg-surface/50 border border-border/50 font-bold text-textMain rounded-tl-xl w-1/4">Feature / Metric</th>
-                {competitors.slice(0, 3).map((comp, i) => (
-                  <th key={i} className="p-4 bg-surface/30 border border-border/50 font-bold text-textMain text-center">
-                    {comp.name}
-                    {comp.threat_score && <div className="text-[10px] text-vera-amber mt-1 font-normal">Threat: {comp.threat_score}/100</div>}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="p-4 bg-surface/20 border border-border/50 font-medium text-textMuted text-sm">Pricing</td>
-                {competitors.slice(0, 3).map((comp, i) => (
-                  <td key={i} className="p-4 bg-surface/10 border border-border/50 text-sm text-center text-success">{comp.pricing || '-'}</td>
-                ))}
-              </tr>
-              <tr>
-                <td className="p-4 bg-surface/20 border border-border/50 font-medium text-textMuted text-sm">Target Customers</td>
-                {competitors.slice(0, 3).map((comp, i) => (
-                  <td key={i} className="p-4 bg-surface/10 border border-border/50 text-sm text-center text-textMain">{comp.target_customers || '-'}</td>
-                ))}
-              </tr>
-              <tr>
-                <td className="p-4 bg-surface/20 border border-border/50 font-medium text-textMuted text-sm">Business Model</td>
-                {competitors.slice(0, 3).map((comp, i) => (
-                  <td key={i} className="p-4 bg-surface/10 border border-border/50 text-sm text-center text-primary">{comp.business_model || '-'}</td>
-                ))}
-              </tr>
-              <tr>
-                <td className="p-4 bg-surface/20 border border-border/50 font-medium text-textMuted text-sm">Key Weakness</td>
-                {competitors.slice(0, 3).map((comp, i) => {
-                  const rawWeak = comp.weaknesses && comp.weaknesses[0] ? comp.weaknesses[0] : '-';
-                  const weakStr = typeof rawWeak === 'string' ? rawWeak : (rawWeak?.description || rawWeak?.weakness || JSON.stringify(rawWeak));
-                  return (
-                    <td key={i} className="p-4 bg-surface/10 border border-border/50 text-sm text-center text-error">
-                      {weakStr}
-                    </td>
-                  );
-                })}
-              </tr>
-            </tbody>
-          </table>
+      {/* 2.5: Interactive Positioning Map & Moat Score */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-4">
+        {/* Positioning Map */}
+        <div className="glass-panel p-6 rounded-2xl border-border/50 flex flex-col h-[400px]">
+          <h3 className="text-[10px] font-bold text-textMuted uppercase tracking-widest flex items-center gap-2 mb-4">
+            <Activity className="w-3.5 h-3.5 text-vera-cyan" /> Competitive Positioning (Price vs. Value)
+          </h3>
+          <div className="flex-1 w-full relative">
+            <ResponsiveContainer width="100%" height="100%">
+              <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                <XAxis type="number" dataKey="position_x" name="Price" domain={[0, 100]} stroke="rgba(255,255,255,0.3)" tick={false} axisLine={{ stroke: 'rgba(255,255,255,0.3)' }} label={{ value: 'Price / Complexity', position: 'bottom', fill: 'rgba(255,255,255,0.5)', fontSize: 10 }} />
+                <YAxis type="number" dataKey="position_y" name="Value" domain={[0, 100]} stroke="rgba(255,255,255,0.3)" tick={false} axisLine={{ stroke: 'rgba(255,255,255,0.3)' }} label={{ value: 'Market Value / Depth', angle: -90, position: 'left', fill: 'rgba(255,255,255,0.5)', fontSize: 10 }} />
+                <RechartsTooltip cursor={{strokeDasharray: '3 3'}} content={({ active, payload }) => {
+                  if (active && payload && payload.length) {
+                    const data = payload[0].payload;
+                    return (
+                      <div className="bg-surface p-3 rounded-xl border border-border/50 shadow-xl">
+                        <div className="text-sm font-bold text-primary mb-1">{data.name}</div>
+                        <div className="text-xs text-textMuted mb-2">{data.pricing}</div>
+                        <div className="text-[10px] text-textMain max-w-[150px] leading-tight">{data.product_summary}</div>
+                      </div>
+                    );
+                  }
+                  return null;
+                }} />
+                <Scatter name="Competitors" data={competitors} fill="#0ea5e9">
+                  {competitors.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={index === 0 ? '#8b5cf6' : '#0ea5e9'} />
+                  ))}
+                </Scatter>
+              </ScatterChart>
+            </ResponsiveContainer>
+          </div>
         </div>
+
+        {/* Competitive Moat Analysis */}
+        {competitors[0]?.moat_score && (
+          <div className="glass-panel p-6 rounded-2xl border-border/50 flex flex-col h-[400px]">
+            <h3 className="text-[10px] font-bold text-textMuted uppercase tracking-widest flex items-center gap-2 mb-4">
+              <Shield className="w-3.5 h-3.5 text-primary" /> Top Competitor Moat Analysis ({competitors[0].name})
+            </h3>
+            <div className="flex-1 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart outerRadius={100} width={730} height={250} data={[
+                  { subject: 'Technology', A: competitors[0].moat_score.technology || 50, fullMark: 100 },
+                  { subject: 'Brand', A: competitors[0].moat_score.brand || 50, fullMark: 100 },
+                  { subject: 'Distribution', A: competitors[0].moat_score.distribution || 50, fullMark: 100 },
+                  { subject: 'Execution', A: competitors[0].moat_score.execution || 50, fullMark: 100 },
+                ]}>
+                  <PolarGrid stroke="rgba(255,255,255,0.1)" />
+                  <PolarAngleAxis dataKey="subject" tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 10 }} />
+                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+                  <Radar name={competitors[0].name} dataKey="A" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.3} />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 3: Top Competitors */}

@@ -63,14 +63,16 @@ class ReportGenerator:
         sections.build_cover_page(story, styles, report_id, context)
         sections.build_toc(story, styles)
         
-        sections.build_executive_dashboard(story, styles, context)
+        sections.build_executive_summary(story, styles, context)
         sections.build_startup_scorecard(story, styles, context)
-        sections.build_market_intelligence(story, styles, context)
-        sections.build_competitor_matrix(story, styles, context)
-        sections.build_swot_matrix(story, styles, context)
-        sections.build_risk_assessment(story, styles, context)
-        sections.build_action_plan(story, styles, context)
-        sections.build_appendix(story, styles, raw_context)
+        sections.build_market_insights(story, styles, context)
+        sections.build_customer_insights(story, styles, context)
+        sections.build_competitive_landscape(story, styles, context)
+        sections.build_swot_interpretation(story, styles, context)
+        sections.build_risk_analysis(story, styles, context)
+        sections.build_mvp_roadmap(story, styles, context)
+        sections.build_gtm_roadmap(story, styles, context)
+        sections.build_final_verdict(story, styles, context)
 
         try:
             doc.build(story, onFirstPage=self._create_header_footer, onLaterPages=self._create_header_footer)
