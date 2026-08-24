@@ -37,6 +37,7 @@ async def run_validation_background(job_id: str, query: str, orchestrator: Start
         _IN_MEMORY_JOBS[job_id] = {"status": "FAILURE", "error": str(e)}
 
 @router.post("")
+@router.post("/")
 @limiter.limit("10/minute")
 async def start_validation(
     request: Request,

@@ -67,8 +67,8 @@ const Navbar = () => {
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <Link to="/" className="flex items-center gap-3 group focus:outline-none rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-            <div className="bg-primary/10 p-1 rounded-xl group-hover:bg-primary/20 transition-all duration-300">
-              <img src="/icons/logo.png" alt="VentureLens Logo" className="w-8 h-8 object-cover rounded-lg" />
+            <div className="bg-primary/10 p-2 rounded-xl group-hover:bg-primary/20 transition-all duration-300">
+              <Layers className="w-7 h-7 text-primary" />
             </div>
             <span className="font-extrabold text-xl tracking-tight text-textMain">
               Venture<span className="text-primary">Lens</span>

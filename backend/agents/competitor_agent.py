@@ -415,6 +415,7 @@ class CompetitorAgent:
         
         # LLM Strict Validation: Ensure no unwanted or fake competitors
         if self.llm_client and validated_competitors:
+            import json
             logger.info(f"{log_prefix} Performing LLM strict validation on competitors.")
             try:
                 comp_names = [c["name"] for c in validated_competitors]

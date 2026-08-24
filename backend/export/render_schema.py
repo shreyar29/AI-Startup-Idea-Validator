@@ -17,7 +17,7 @@ class CustomerData(BaseModel):
     pain_points: List[str] = Field(default_factory=list)
 
 class CompetitorData(BaseModel):
-    competitors: List[str] = Field(default_factory=list)
+    competitors: List[Any] = Field(default_factory=list)
     competitive_gaps: List[str] = Field(default_factory=list)
 
 class StrategyData(BaseModel):

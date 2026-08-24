@@ -75,7 +75,7 @@ class ExportAggregator:
             },
             
             "competitor": {
-                "competitors": cls._extract_list(competitor.get("competitors", [])),
+                "competitors": competitor.get("competitors", []),
                 "competitive_gaps": cls._extract_list(competitor.get("competitor_gaps", [])),
             },
             

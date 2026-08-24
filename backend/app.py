@@ -37,6 +37,8 @@ try:
     from api.progress_routes import router as progress_router
     HAS_ENTERPRISE_API = True
 except ImportError as e:
+    import logging
+    logging.getLogger(__name__).error(f"Failed to load enterprise API: {e}")
     HAS_ENTERPRISE_API = False
 from utils.logger import get_logger
 
