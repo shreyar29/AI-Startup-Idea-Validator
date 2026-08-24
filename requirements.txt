@@ -29,6 +29,7 @@ rich>=13.7.0
 
 # Search Fallback
 duckduckgo-search>=6.0.0
+ddgs>=9.5.0
 
 # LLM Providers
 google-genai>=0.2.0
