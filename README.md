@@ -1,4 +1,4 @@
-# VentureLens — AI Startup Idea Validator
+# VentureLens — Development of AI Based Startup Idea Validator with Market Analysis Assistance
 
 A production-ready, multi-agent AI system that validates startup ideas by performing live web research and synthesizing comprehensive market, competitor, and customer intelligence via a decentralized mesh network.
 
