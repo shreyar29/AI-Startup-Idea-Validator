@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: venturelens
+    env: python
+    region: oregon # Or your preferred region
+    buildCommand: "./build.sh"
+    startCommand: "cd backend && uvicorn app:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: ENVIRONMENT
+        value: production
+      - key: ALLOWED_ORIGINS
+        value: "" # Empty because same-origin serving
+      - key: SECRET_KEY
+        generateValue: true
+      - key: GOOGLE_AI_API_KEY
+        sync: false # Requires manual setup in dashboard
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
