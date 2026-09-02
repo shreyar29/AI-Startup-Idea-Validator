@@ -1,6 +1,5 @@
 <div align="center">
-  <img src="https://img.icons8.com/3d-fluency/94/startup.png" alt="Startup Icon" width="100" />
-  <h1>🚀 VentureLens</h1>
+  <h1> VentureLens</h1>
   <p><b>Development of AI Based Startup Idea Validator with Market Analysis Assistance</b></p>
   
   [![Frontend](https://img.shields.io/badge/Frontend-React%2018%20%7C%20Vite-61DAFB?logo=react&logoColor=black)](#)
@@ -68,7 +67,7 @@ For every startup idea, the VentureLens intelligence engine generates:
 ## 🔄 How VentureLens Works
 
 <div align="center">
-  <img src="docs/assets/intelligence_workflow.png" alt="VentureLens End-to-End Intelligence Workflow" width="600" />
+  <img src="docs/assets/intelligence_workflow.png" alt="VentureLens End-to-End Intelligence Workflow" width="600" height="300" />
 </div>
 
 <br/>
@@ -89,7 +88,7 @@ For every startup idea, the VentureLens intelligence engine generates:
 VentureLens follows a deeply modular, decoupled architecture designed around independent intelligence services and reusable business analysis components.
 
 <div align="center">
-  <img src="docs/assets/system_architecture.png" alt="VentureLens System Architecture" width="600" />
+  <img src="docs/assets/system_architecture.png" alt="VentureLens System Architecture" width="600" height="300" />
 </div>
 
 <br/>
