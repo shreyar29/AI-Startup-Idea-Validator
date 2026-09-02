@@ -4,22 +4,22 @@
 
 ```mermaid
 graph TD
-    Start[User Submits Idea] --> Dashboard[Dashboard Initiates Request]
-    Dashboard --> AuthCheck{Is Authenticated?}
+    Start["User Submits Idea"] --> Dashboard["Dashboard Initiates Request"]
+    Dashboard --> AuthCheck{"Is Authenticated?"}
     
-    AuthCheck -->|No| Login[Redirect to Login]
-    AuthCheck -->|Yes| ValidationAPI[POST /api/analyze]
+    AuthCheck -->|No| Login["Redirect to Login"]
+    AuthCheck -->|Yes| ValidationAPI["POST /api/analyze"]
     
-    ValidationAPI --> DB_Insert[Create Report Record 'pending']
-    ValidationAPI --> BackgroundTask[Spawn Orchestrator Task]
+    ValidationAPI --> DB_Insert["Create Report Record 'pending'"]
+    ValidationAPI --> BackgroundTask["Spawn Orchestrator Task"]
     
-    BackgroundTask --> Mesh[Execute Agent Mesh]
-    Mesh --> Score[Calculate Final Score]
-    Score --> DB_Update[Update Report 'completed']
+    BackgroundTask --> Mesh["Execute Agent Mesh"]
+    Mesh --> Score["Calculate Final Score"]
+    Score --> DB_Update["Update Report 'completed'"]
     
-    Dashboard -->|Poll /api/history/{id}| StatusCheck{Status?}
-    StatusCheck -->|Pending| PipelineUI[Show Pipeline Animations]
-    StatusCheck -->|Completed| Redirect[Redirect to Report Workspace]
+    Dashboard -->|"Poll /api/history/{id}"| StatusCheck{"Status?"}
+    StatusCheck -->|Pending| PipelineUI["Show Pipeline Animations"]
+    StatusCheck -->|Completed| Redirect["Redirect to Report Workspace"]
 ```
 
 ## 2. Vera Chat Workflow
@@ -53,21 +53,21 @@ sequenceDiagram
 
 ```mermaid
 graph TD
-    User[User Clicks Export] --> ExportModal[Select PDF or PPTX]
+    User["User Clicks Export"] --> ExportModal["Select PDF or PPTX"]
     
-    ExportModal -->|PDF| PDF_Route[GET /api/export/pdf/{reportId}]
-    ExportModal -->|PPTX| PPT_Route[GET /api/export/ppt/{reportId}]
+    ExportModal -->|PDF| PDF_Route["GET /api/export/pdf/{reportId}"]
+    ExportModal -->|PPTX| PPT_Route["GET /api/export/ppt/{reportId}"]
     
-    PDF_Route --> FetchDB[Retrieve Full JSON Report]
+    PDF_Route --> FetchDB["Retrieve Full JSON Report"]
     PPT_Route --> FetchDB
     
-    FetchDB --> Engine{Render Engine}
+    FetchDB --> Engine{"Render Engine"}
     
-    Engine -->|PDF| FPDF[Generate FPDF Layout]
-    Engine -->|PPTX| PPTX[Generate Python-PPTX Slides]
+    Engine -->|PDF| FPDF["Generate FPDF Layout"]
+    Engine -->|PPTX| PPTX["Generate Python-PPTX Slides"]
     
-    FPDF --> Cleanup[Save Temp File]
+    FPDF --> Cleanup["Save Temp File"]
     PPTX --> Cleanup
     
-    Cleanup --> StreamingResponse[Stream File to Browser]
+    Cleanup --> StreamingResponse["Stream File to Browser"]
 ```

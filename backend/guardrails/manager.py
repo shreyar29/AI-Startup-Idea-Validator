@@ -62,7 +62,7 @@ def _get_metrics() -> GuardrailMetrics:
 class GuardrailManager:
     """
     Redesigned Guardrail Manager providing production-ready, highly accurate,
-    and non-destructive validation for the AI Startup Idea Validator.
+    and non-destructive validation for the Development of AI Based Startup Idea Validator with Market Analysis Assistance.
     Implements factual verification, semantic numeric matching, and hallucination prevention
     without aggressively deleting valid information.
     """

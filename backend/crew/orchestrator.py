@@ -1,7 +1,7 @@
 """
 orchestrator.py
 
-Fully Connected Mesh Architecture for the Multi-Agent Startup Idea Validator.
+Fully Connected Mesh Architecture for the Multi-Agent Development of AI Based Startup Idea Validator with Market Analysis Assistance.
 
 Agents:
     1. Web Search Agent

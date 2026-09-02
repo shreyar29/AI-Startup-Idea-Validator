@@ -1,143 +1,163 @@
-# VentureLens System Architecture
+# VentureLens Engineering Architecture
 
-## 1. High-Level System Architecture
+This document provides a deep, technical breakdown of the VentureLens platform architecture.
 
-VentureLens operates as an asynchronous, event-driven mesh network. The backend is powered by FastAPI, leveraging a decentralized multi-agent system built on asyncio. The frontend is a React SPA built with Vite, communicating over REST and WebSockets.
+## 1. High-Level Data Flow Architecture
+
+VentureLens is fundamentally an event-driven system built around a central mesh orchestrator. The data flow guarantees that raw inputs are sanitized, enriched, validated, and finally structured for downstream UI consumption and Vector DB storage.
 
 ```mermaid
-graph TD
-    Client[React Frontend] <-->|REST API| API_GW[FastAPI Gateway]
-    Client <-->|WebSockets| Vera[Vera Chat Agent]
-    
-    API_GW --> DB[(SQLite Database)]
-    API_GW --> Orch[Agent Orchestrator]
-    
-    Orch --> Guard[Guardrail Manager]
-    Orch --> Mesh[P2P Agent Mesh]
-    
-    subgraph P2P Agent Mesh
-        WS[Web Search Agent]
-        MKT[Market Agent]
-        CUST[Customer Agent]
-        COMP[Competitor Agent]
-        RISK[Risk Agent]
-        SWOT[SWOT Agent]
-        MVP[MVP Agent]
-        GTM[GTM Agent]
-        
-        WS --> MKT & CUST & COMP
-        MKT --> SWOT & MVP & GTM & RISK
-        CUST --> SWOT & MVP & GTM & RISK
-        COMP --> SWOT & RISK
-    end
-    
-    Mesh <--> LLM[LLM Provider]
-    WS <--> Search[Tavily Search API]
+sequenceDiagram
+    participant U as User
+    participant GW as API Gateway
+    participant O as Orchestrator
+    participant M as Agent Mesh
+    participant DB as SQLite / State
+    participant R as Qdrant RAG
+
+    U->>GW: POST /api/analyze (Idea)
+    GW->>DB: Initialize 'pending' report
+    GW->>O: Spawn Background Task
+    O->>M: Dispatch Web Search Agent
+    M-->>O: Enriched Market Data Context
+    O->>M: Dispatch Parallel Analysis Layer
+    M-->>O: Structured Pydantic Contracts
+    O->>M: Dispatch Parallel Synthesis Layer
+    M-->>O: Final Validation JSON
+    O->>R: Chunk & Embed JSON Report
+    O->>DB: Update 'completed' report state
+    O-->>GW: WebSocket Push (Success)
 ```
 
 ## 2. Frontend Architecture
 
-The frontend is a component-driven React application utilizing Context API for state management and Framer Motion for animations.
+The React SPA utilizes a decoupled Context API for state management, allowing isolated renders of heavy data components without blocking the main thread.
 
 ```mermaid
 graph TD
-    App --> Router[React Router]
+    App --> Router[React Router DOM]
     
     Router --> Dashboard[Dashboard Hub]
-    Router --> Workspace[Workspace Wrapper]
-    Router --> ReportView[Report View]
+    Router --> Workspace[Workspace Component]
     
-    ReportView --> Context[DashboardContext]
-    Context --> Sections[Report Sections]
-    
-    subgraph Report Sections
-        Market[MarketSection.jsx]
-        Customer[CustomerSection.jsx]
-        Competitor[CompetitorSection.jsx]
-        Comparison[ComparisonSection.jsx]
-        SWOT[SWOTSection.jsx]
-        MVP[MVPSection.jsx]
-        GTM[GTMSection.jsx]
-        Risk[RiskSection.jsx]
+    subgraph Workspace Hub
+        Workspace --> ReportView[Report Visualization]
+        Workspace --> VeraUI[Vera AI Chat Interface]
     end
     
-    Workspace --> VeraUI[Vera Chat UI]
+    subgraph State Management
+        ReportView --> Context[DashboardContext]
+        Context --> Sections[Market, Risk, SWOT, MVP]
+    end
 ```
 
 ## 3. Backend Architecture
 
-The backend follows a service-oriented architecture, heavily leveraging dependency injection and asynchronous tasks.
-
-```mermaid
-graph TD
-    Routes[FastAPI Routes] --> Controllers[Controllers/Handlers]
-    Controllers --> Services[Business Services]
-    Services --> DB[SQLAlchemy Models]
-    Services --> Orchestrator[Crew Orchestrator]
-    
-    Orchestrator --> Context[Shared Memory Context]
-    Orchestrator --> Validator[Pydantic Validators]
-    Orchestrator --> Agents[Specialized Agents]
-```
-
-## 4. Agent Orchestration Architecture
-
-The orchestration engine uses a Peer-to-Peer (P2P) mesh model where agents directly consume outputs from upstream agents rather than relying on a rigid central controller.
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant Orch as Orchestrator
-    participant WS as Web Search
-    participant Layer1 as Market/Customer/Competitor
-    participant Layer2 as SWOT/MVP/GTM/Risk
-    participant Score as Scoring Engine
-    
-    User->>Orch: Submit Idea
-    Orch->>WS: Initiate Search
-    WS-->>Orch: Research Context
-    
-    Orch->>Layer1: Execute Parallel (Research Context)
-    Layer1-->>Orch: Phase 1 Validated Contracts
-    
-    Orch->>Layer2: Execute Parallel (Phase 1 Context)
-    Layer2-->>Orch: Phase 2 Validated Contracts
-    
-    Orch->>Score: Calculate Final Score
-    Score-->>Orch: Scorecard
-    
-    Orch-->>User: Final Finalized Report
-```
-
-## 5. RAG Pipeline Architecture
-
-The Retrieval-Augmented Generation (RAG) pipeline is utilized exclusively by the Vera Chat agent for context-aware Q&A against the generated report.
+FastAPI acts as the API Gateway, managing HTTP requests, background tasks, and WebSockets.
 
 ```mermaid
 graph LR
-    Report[JSON Report Data] --> Chunk[Text Chunker]
-    Chunk --> Embed[Embedding Model]
-    Embed --> VectorStore[(In-Memory Qdrant)]
-    
-    UserQuery[User Chat Message] --> EmbedQuery[Embed Query]
-    EmbedQuery --> VectorStore
-    VectorStore -->|Top K Matches| ContextBuilder[Context Builder]
-    ContextBuilder --> LLM[LLM Generation]
-    LLM --> Response[Vera Response]
+    API[FastAPI Routes] --> Controllers[Request Handlers]
+    Controllers --> Services[Business Services]
+    Services --> Models[SQLAlchemy ORM]
+    Services --> Orchestrator[Agent Orchestrator]
 ```
 
-## 6. Export Architecture
+## 4. Agent Architecture (P2P Mesh)
+
+Unlike traditional LLM chains (e.g., LangChain Sequential), VentureLens agents act as independent microservices passing strict Pydantic schemas.
 
 ```mermaid
 graph TD
-    ReportData[Aggregated JSON] --> ExportManager[Export Service]
+    subgraph Layer 1: Data Gathering
+        WS[Web Search Agent]
+    end
     
-    ExportManager --> PDF[PDF Generator]
-    ExportManager --> PPT[PPTX Generator]
+    subgraph Layer 2: Core Analysis
+        MKT[Market Agent]
+        CUST[Customer Agent]
+        COMP[Competitor Agent]
+    end
     
-    PDF --> PDF_API[FPDF / WeasyPrint]
-    PPT --> PPT_API[python-pptx]
+    subgraph Layer 3: Strategic Synthesis
+        SWOT[SWOT Agent]
+        MVP[MVP Agent]
+        GTM[GTM Agent]
+        RISK[Risk Agent]
+    end
     
-    PDF_API --> OutputFile[Downloadable Blob]
-    PPT_API --> OutputFile
+    WS --> MKT & CUST & COMP
+    MKT --> SWOT & MVP & GTM & RISK
+    CUST --> SWOT & MVP & GTM & RISK
+    COMP --> SWOT & RISK
+```
+
+## 5. RAG (Retrieval-Augmented Generation) Architecture
+
+To power the Vera AI system without overwhelming context windows, we use an in-memory Qdrant instance.
+
+```mermaid
+graph TD
+    JSON[Completed Report JSON] --> Chunker[Document Chunker]
+    Chunker --> Embedder[Embedding Model]
+    Embedder --> VectorStore[(Qdrant Vector DB)]
+    
+    UserQuery[User Chat Query] --> EmbedQuery[Embed Query]
+    EmbedQuery --> VectorStore
+    VectorStore -->|Top K Results| ContextBuilder
+    ContextBuilder --> LLM[Chat LLM]
+    LLM --> Response[WebSocket Stream]
+```
+
+## 6. Guardrails & Validation Architecture
+
+Every agent output passes through the Guardrail Manager before being accepted into the shared state.
+
+```mermaid
+graph LR
+    Agent[Agent Output] --> Parser[JSON Parser]
+    Parser --> Pydantic[Schema Validation]
+    Pydantic --> Factual[Factual Consistency Check]
+    Factual --> State[Shared Context State]
+    Factual -.->|Retry on fail| Agent
+```
+
+## 7. Export Architecture
+
+The Export service reads the final JSON state and uses specific render engines.
+
+```mermaid
+graph TD
+    State[Final Report State] --> ExportService[Export Manager]
+    
+    ExportService --> PDF[PDF Engine]
+    ExportService --> PPTX[PPTX Engine]
+    
+    PDF --> StreamPDF[Stream Response Blob]
+    PPTX --> StreamPPTX[Stream Response Blob]
+```
+
+## 8. Vera AI Architecture
+
+Vera is a WebSocket-driven conversational agent with direct access to the RAG pipeline.
+
+```mermaid
+graph TD
+    User -->|WebSocket| VeraHandler[FastAPI WS Route]
+    VeraHandler --> SessionManager[Chat Session Manager]
+    SessionManager --> Retrieval[RAG Context Fetcher]
+    Retrieval --> LLM[Streaming LLM Response]
+    LLM --> VeraHandler
+```
+
+## 9. Workspace Architecture
+
+The workspace handles the persistence and historical tracking of generated ideas.
+
+```mermaid
+graph LR
+    DB[(SQLite DB)] --> Query[SQLAlchemy Queries]
+    Query --> Cache[Memory Cache]
+    Cache --> API[History API]
+    API --> Client[Dashboard UI]
 ```
