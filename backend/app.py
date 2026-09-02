@@ -338,4 +338,4 @@ if os.path.isdir(frontend_dist):
         return JSONResponse(status_code=404, content={"message": "Frontend build not found."})
 else:
     logger.warning("Frontend dist directory not found. API only mode.")
-
+# Trigger reload
