@@ -1,11 +1,6 @@
 <div align="center">
   <h1> VentureLens</h1>
   <p><b>Development of AI Based Startup Idea Validator with Market Analysis Assistance</b></p>
-  
-  [![Frontend](https://img.shields.io/badge/Frontend-React%2018%20%7C%20Vite-61DAFB?logo=react&logoColor=black)](#)
-  [![Backend](https://img.shields.io/badge/Backend-FastAPI%20%7C%20AsyncIO-009688?logo=fastapi&logoColor=white)](#)
-  [![AI Core](https://img.shields.io/badge/AI-OpenRouter%20%7C%20Qdrant-8A2BE2)](#)
-  [![Status](https://img.shields.io/badge/Status-Production%20Ready-success)](#)
 </div>
 
 <br/>
@@ -139,7 +134,7 @@ VentureLens
 `FastAPI` • `Python 3.11` • `AsyncIO` • `SQLAlchemy` • `Alembic`
 
 **AI & Intelligence**  
-`OpenRouter` • `Tavily Search` • `Retrieval-Augmented Generation (RAG)` • `P2P Agent-Based Analysis` • `Structured Validation`
+`Google AI` • `OpenRouter` • `Tavily Search` • `Retrieval-Augmented Generation (RAG)` • `P2P Agent-Based Analysis` • `Structured Validation`
 
 **Data & Storage**  
 `SQLite` • `Qdrant Vector Storage` • `JSON-Based Intelligence Contracts`
