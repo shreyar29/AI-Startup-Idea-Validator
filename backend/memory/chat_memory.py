@@ -5,7 +5,7 @@ from typing import List, Dict, Any
 
 class ChatMemoryManager:
     @staticmethod
-    async def get_session_context(db: AsyncSession, session_id: str, user_id: str, max_messages: int = 10) -> List[Dict[str, str]]:
+    async def get_session_context(db: AsyncSession, session_id: str, user_id: str, max_messages: int = 10, report_id: str = None) -> List[Dict[str, str]]:
         """
         Retrieves the last N messages for a given chat session to build the LLM context window.
         Verifies ownership to prevent unauthorized access. Creates session if it doesn't exist.
@@ -16,7 +16,7 @@ class ChatMemoryManager:
         
         if not session:
             # Create a new session on the fly
-            session = ChatSession(id=session_id, user_id=user_id, report_id=None)
+            session = ChatSession(id=session_id, user_id=user_id, report_id=report_id)
             db.add(session)
             try:
                 await db.commit()

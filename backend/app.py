@@ -128,13 +128,6 @@ if not ALLOWED_ORIGINS:
 elif "*" in ALLOWED_ORIGINS and not is_development:
     raise RuntimeError("Wildcard CORS ('*') is not permitted in production.")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 class RequestTrackingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable):
@@ -194,6 +187,16 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
             raise
 
 app.add_middleware(RequestTrackingMiddleware)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# RequestTrackingMiddleware is now added above CORSMiddleware
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):

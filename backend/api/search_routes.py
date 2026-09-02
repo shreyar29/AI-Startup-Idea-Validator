@@ -24,6 +24,18 @@ _IN_MEMORY_JOBS = {}
 
 async def run_validation_background(job_id: str, query: str, orchestrator: StartupValidatorOrchestrator):
     try:
+        try:
+            expansion_prompt = f"Given the following startup idea, extract or infer the specific startup niche, target audience, and business model. Return an expanded, detailed description of the startup idea combining the original concept with these inferred details. Startup Idea: '{query}'\n\nReturn ONLY the expanded description text."
+            expanded_query = await orchestrator.llm_client.generate_response(
+                system_prompt="You are a professional startup analyst. Do not include introductory text, just return the expanded idea.",
+                user_prompt=expansion_prompt
+            )
+            if expanded_query and len(expanded_query) > 20:
+                logger.info(f"Expanded query for {job_id}: {expanded_query[:100]}...")
+                query = expanded_query
+        except Exception as e:
+            logger.warning(f"Query expansion failed for {job_id}, using original query: {e}")
+            
         result = await orchestrator.validate_idea(query, job_id)
         
         # In a real enterprise system, we would associate this with the logged-in user.

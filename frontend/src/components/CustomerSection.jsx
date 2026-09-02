@@ -13,6 +13,7 @@ import {
   Activity,
   DollarSign
 } from 'lucide-react';
+import AgentScoreBadge from './dashboard/AgentScoreBadge';
 
 const CustomerSection = ({ data }) => {
   if (!data || Object.keys(data).length === 0) return null;
@@ -76,6 +77,7 @@ const CustomerSection = ({ data }) => {
           <Users className="w-6 h-6 text-primary" />
         </div>
         <h2 className="text-2xl font-bold text-textMain tracking-tight">Customer Intelligence</h2>
+        <AgentScoreBadge score={data.customer_score} confidence={data.confidence_level} />
       </div>
 
       {/* 1: Executive Customer Insight Hero */}

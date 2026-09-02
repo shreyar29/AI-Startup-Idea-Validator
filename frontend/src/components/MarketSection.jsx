@@ -15,6 +15,7 @@ import {
   Scale
 } from 'lucide-react';
 import { BarChart, Bar, ResponsiveContainer, Cell } from 'recharts';
+import AgentScoreBadge from './dashboard/AgentScoreBadge';
 
 const MarketSection = ({ data }) => {
   if (!data || Object.keys(data).length === 0) return null;
@@ -58,6 +59,7 @@ const MarketSection = ({ data }) => {
           <Activity className="w-6 h-6 text-primary" />
         </div>
         <h2 className="text-2xl font-bold text-textMain tracking-tight">Executive Market Intelligence</h2>
+        <AgentScoreBadge score={data.opportunity_score} confidence={data.confidence_level} />
       </div>
 
       {/* 1: Executive Market Verdict */}

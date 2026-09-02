@@ -168,7 +168,7 @@ const Home = () => {
                   onClick={(e) => { 
                     e.preventDefault();
                     setIdea(s.desc); 
-                    navigate('/dashboard', { state: { idea: s.desc } });
+                    if (textareaRef.current) textareaRef.current.focus();
                   }}
                   className="group text-left p-6 rounded-2xl bg-surface/30 border border-white/5 hover:bg-surface/50 hover:border-primary/30 hover:-translate-y-1 transition-all duration-300 relative overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-primary shadow-sm hover:shadow-lg"
                 >

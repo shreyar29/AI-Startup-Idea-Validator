@@ -191,6 +191,7 @@ class MVPAgent:
         prompt = f"""
 Analyze the provided intelligence and determine the Minimum Viable Product (MVP) the founder should build first.
 Focus on solving the core customer pain points while differentiating from competitors and minimizing identified risks.
+All recommendations must be tailored exactly to this specific startup idea; completely avoid generic industry-wide commentary. If data is missing for a section, provide a brief explanation instead of 'None' or 'Unknown'.
 
 For 'core_features', prioritize explicitly based on 'customer_pain_points' and 'competitor_gaps'. 
 Each feature must trace back to the evidence.
@@ -231,7 +232,12 @@ Evidence Payload:
                 logger.info(f"{log_prefix} Calling LLM attempt {attempt + 1}/{max_retries}.")
                 raw_response = await asyncio.wait_for(
                     self.llm_client.generate_response(
-                        system_prompt="You are an expert startup product manager and technical architect. Return ONLY valid JSON.",
+                        system_prompt=(
+                            "You are an expert startup product manager and technical architect. "
+                            "STRICT REQUIREMENT: Penalize broad industry commentary. You must analyze the EXACT startup idea and target customer. "
+                            "Do not use generic 'Unknown' or 'None' placeholders. If data is unavailable, provide a brief explanation of why. "
+                            "Return ONLY valid JSON."
+                        ),
                         user_prompt=(prompt if attempt == 0 else f"{prompt}\n\nFix JSON formatting. Error: {last_error}"),
                         response_format={"type": "json_object"}
                     ),

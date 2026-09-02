@@ -11,10 +11,10 @@ from pptx.enum.shapes import MSO_SHAPE
 logger = logging.getLogger("export.ppt")
 
 # Dark Theme Colors
-BG_COLOR = RGBColor(15, 23, 42)      # Slate 900
-TEXT_MAIN = RGBColor(248, 250, 252)  # Slate 50
-TEXT_MUTED = RGBColor(148, 163, 184) # Slate 400
-ACCENT = RGBColor(59, 130, 246)      # Blue 500
+BG_COLOR = RGBColor(10, 15, 30)      # Deep Navy
+TEXT_MAIN = RGBColor(255, 255, 255)  # White
+TEXT_MUTED = RGBColor(180, 190, 210) # Soft Slate
+ACCENT = RGBColor(245, 158, 11)      # Vibrant Amber
 
 class PPTExporter:
     @staticmethod
@@ -100,7 +100,7 @@ class PPTExporter:
         def add_stat_box(slide, left, top, value, label):
             shape = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(left), Inches(top), Inches(3.5), Inches(2))
             shape.fill.solid()
-            shape.fill.fore_color.rgb = RGBColor(30, 41, 59) # Slate 800
+            shape.fill.fore_color.rgb = RGBColor(20, 30, 50) # Slate 800
             shape.line.color.rgb = ACCENT
             
             tf = shape.text_frame

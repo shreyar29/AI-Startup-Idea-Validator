@@ -465,3 +465,68 @@ class GuardrailManager:
         logger.info("Final Response Guardrail passed: Output strictly validated and Guardrail Report appended.")
         cls._reset_metrics()
         return response
+
+class QualityGate:
+    """
+    Phase 4: Pre-Report Validation Layer & Quality Control
+    """
+    
+    @staticmethod
+    def evaluate_quality(final_data: Dict[str, Any], idea: str) -> Dict[str, Any]:
+        """
+        Evaluates the quality of all agent outputs, checks for missing data, 
+        and computes a final report quality score.
+        """
+        weak_agents = []
+        quality_score = 100
+        penalties = []
+        
+        # 1. Missing Data Detection & Score Consistency Check
+        for key, agent_data in final_data.items():
+            if not isinstance(agent_data, dict):
+                continue
+                
+            agent_score = 100
+            str_data = json.dumps(agent_data)
+            
+            if "Unknown" in str_data or "None" in str_data or "Insufficient verified evidence" in str_data:
+                agent_score -= 15
+                penalties.append(f"{key}: Contains Unknown/None placeholders.")
+                
+            if key == "customer" and not agent_data.get("target_customer_segments"):
+                agent_score -= 30
+                penalties.append("Customer: Empty customer segments.")
+                
+            if key == "swot" and not agent_data.get("strengths"):
+                agent_score -= 30
+                penalties.append("SWOT: Empty SWOT sections.")
+                
+            if key == "competitor" and not agent_data.get("competitors"):
+                agent_score -= 40
+                penalties.append("Competitor: Missing competitors.")
+                
+            if key == "risk" and not agent_data.get("risks"):
+                agent_score -= 40
+                penalties.append("Risk: Missing risk assessments.")
+                
+            # 2. Idea Alignment Check
+            idea_keywords = set([w.lower() for w in str(idea).split() if len(w) > 4])
+            if idea_keywords:
+                match_count = sum(1 for w in idea_keywords if w in str_data.lower())
+                if match_count == 0 and key not in ["web_search", "startup_score", "comparison"]:
+                    agent_score -= 20
+                    penalties.append(f"{key}: Fails idea alignment check (no keywords matched).")
+            
+            # Flag as weak if below threshold
+            if agent_score < 70:
+                weak_agents.append(key)
+                quality_score -= (100 - agent_score) // 2
+                
+        quality_score = max(0, quality_score)
+        
+        return {
+            "quality_score": quality_score,
+            "passed": quality_score >= 60,
+            "weak_agents": weak_agents,
+            "penalties": penalties
+        }

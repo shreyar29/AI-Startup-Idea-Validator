@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import AgentScoreBadge from './dashboard/AgentScoreBadge';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Layers, CheckSquare, Clock, Code2, Zap, Rocket, Activity, Info } from 'lucide-react';
 import { 
@@ -38,6 +39,7 @@ const MVPSection = ({ data }) => {
         </div>
         <div>
           <h2 className="text-2xl font-bold text-textMain tracking-tight">MVP Strategy Builder</h2>
+          <AgentScoreBadge score={data.mvp_score} confidence={data.confidence_level} />
         </div>
         {data.estimated_complexity && (
           <div className="ml-auto px-4 py-1.5 rounded-full bg-surface border border-border/50 text-sm font-semibold flex items-center gap-2 shadow-sm">

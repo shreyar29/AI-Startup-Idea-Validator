@@ -14,6 +14,8 @@ export const useStartupAnalysis = (idea, reportId) => {
   const abortControllerRef = useRef(null);
 
   const fetchAnalysis = useCallback(async (isRetry = false) => {
+    if (!idea && !reportId) return;
+
     // Return cached data if available and we are not forcing a retry
     const cacheKey = reportId || idea;
     if (!isRetry && cacheKey && reportCache.has(cacheKey)) {

@@ -1,4 +1,5 @@
 import React from 'react';
+import AgentScoreBadge from './dashboard/AgentScoreBadge';
 import { motion } from 'framer-motion';
 import { 
   Crosshair, 
@@ -57,6 +58,7 @@ const CompetitorSection = ({ data }) => {
           <Crosshair className="w-6 h-6 text-primary" />
         </div>
         <h2 className="text-2xl font-bold text-textMain tracking-tight">Competitive Intelligence</h2>
+        <AgentScoreBadge score={data.competition_score} confidence={data.confidence_level} />
       </div>
 
       {/* 1: Competitive Landscape Hero */}

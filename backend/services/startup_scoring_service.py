@@ -85,10 +85,7 @@ class StartupScoringService:
             f"Go-To-Market Strategy (Weight {w_gtm:.2f}): {gtm_score}/100"
         ]
         
-        if is_deeptech:
-            score_explanation.append("Dynamic Adjustment: Execution and Risk weights increased for DeepTech/AI context.")
-        elif is_b2b_saas:
-            score_explanation.append("Dynamic Adjustment: Competition and GTM weights increased for B2B/SaaS context.")
+
 
         return StartupScorecard(
             overall_score=overall_score,

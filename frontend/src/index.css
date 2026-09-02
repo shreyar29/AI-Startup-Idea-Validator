@@ -60,12 +60,25 @@
   }
 
   body {
-    @apply bg-background text-textMain font-sans antialiased selection:bg-primary/30 transition-colors duration-300;
+    @apply bg-background text-textMain font-sans antialiased selection:bg-primary/30 transition-colors duration-300 min-h-screen w-full overflow-x-hidden;
+  }
+  
+  #root {
+    @apply min-h-screen w-full flex flex-col overflow-x-hidden;
   }
 }
 
 @layer utilities {
   .glass-panel {
     @apply bg-card/80 backdrop-blur-md border border-border shadow-card transition-colors duration-300;
+  }
+  
+  /* Force dynamic viewport height for mobile responsiveness */
+  .min-h-screen {
+    min-height: 100dvh !important;
+  }
+  
+  .h-\[calc\(100vh-64px\)\] {
+    height: calc(100dvh - 64px) !important;
   }
 }

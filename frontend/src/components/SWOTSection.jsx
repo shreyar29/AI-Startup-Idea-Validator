@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import AgentScoreBadge from './dashboard/AgentScoreBadge';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowUpRight, ArrowDownRight, ShieldAlert, Zap, Target, Crosshair, Shield, Activity, Plus } from 'lucide-react';
 import { useDashboardData } from '../contexts/DashboardContext';
@@ -37,6 +38,7 @@ const SWOTSection = ({ data }) => {
           <h2 className="text-2xl font-bold text-textMain tracking-tight">SWOT & TOWS Analysis</h2>
           <p className="text-sm text-textMuted mt-1">Strategic evaluation mapping internal factors against external environment</p>
         </div>
+        <AgentScoreBadge score={data.swot_score} confidence={data.confidence_level} />
       </div>
 
       {/* Standard SWOT Grid */}
@@ -104,6 +106,27 @@ const SWOTSection = ({ data }) => {
           );
         })}
       </div>
+
+      {/* Strategic Recommendation */}
+      {data.strategic_recommendation && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="mt-8 p-6 rounded-2xl bg-primary/5 border border-primary/20 relative overflow-hidden"
+        >
+          <div className="absolute top-0 left-0 w-1 h-full bg-primary" />
+          <div className="flex items-start gap-4">
+            <div className="p-3 bg-primary/10 rounded-xl">
+              <Zap className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-textMain mb-2">Strategic Recommendation</h3>
+              <p className="text-textMuted text-sm leading-relaxed">{data.strategic_recommendation}</p>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Actionable TOWS Matrix */}
       {data.tows_matrix && Object.keys(data.tows_matrix).length > 0 && (

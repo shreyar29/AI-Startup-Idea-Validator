@@ -32,8 +32,8 @@ class TaskUpdate(BaseModel):
 # --- PROJECTS ---
 
 @router.get("/projects")
-async def get_projects(db: AsyncSession = Depends(get_db), current_user: Dict[str, Any] = Depends(get_current_user)):
-    stmt = select(Project).where(Project.user_id == current_user["user_id"]).order_by(Project.created_at.desc())
+async def get_projects(db: AsyncSession = Depends(get_db)):
+    stmt = select(Project).where(Project.user_id == "guest").order_by(Project.created_at.desc())
     result = await db.execute(stmt)
     projects = result.scalars().all()
     
@@ -49,9 +49,9 @@ async def get_projects(db: AsyncSession = Depends(get_db), current_user: Dict[st
     ]
 
 @router.post("/projects")
-async def create_project(payload: ProjectCreate, db: AsyncSession = Depends(get_db), current_user: Dict[str, Any] = Depends(get_current_user)):
+async def create_project(payload: ProjectCreate, db: AsyncSession = Depends(get_db)):
     new_project = Project(
-        user_id=current_user["user_id"],
+        user_id="guest",
         name=payload.name,
         description=payload.description,
         report_id=payload.report_id
@@ -64,9 +64,9 @@ async def create_project(payload: ProjectCreate, db: AsyncSession = Depends(get_
 # --- TASKS ---
 
 @router.get("/projects/{project_id}/tasks")
-async def get_tasks(project_id: str, db: AsyncSession = Depends(get_db), current_user: Dict[str, Any] = Depends(get_current_user)):
+async def get_tasks(project_id: str, db: AsyncSession = Depends(get_db)):
     # Verify ownership
-    stmt = select(Project).where(Project.id == project_id, Project.user_id == current_user["user_id"])
+    stmt = select(Project).where(Project.id == project_id)
     result = await db.execute(stmt)
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Project not found")
@@ -90,9 +90,9 @@ async def get_tasks(project_id: str, db: AsyncSession = Depends(get_db), current
     ]
 
 @router.post("/tasks")
-async def create_task(payload: TaskCreate, db: AsyncSession = Depends(get_db), current_user: Dict[str, Any] = Depends(get_current_user)):
+async def create_task(payload: TaskCreate, db: AsyncSession = Depends(get_db)):
     # Verify ownership of project
-    stmt = select(Project).where(Project.id == payload.project_id, Project.user_id == current_user["user_id"])
+    stmt = select(Project).where(Project.id == payload.project_id)
     result = await db.execute(stmt)
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Project not found")
@@ -111,9 +111,9 @@ async def create_task(payload: TaskCreate, db: AsyncSession = Depends(get_db), c
     return {"id": new_task.id, "message": "Task created successfully"}
 
 @router.patch("/tasks/{task_id}")
-async def update_task(task_id: str, payload: TaskUpdate, db: AsyncSession = Depends(get_db), current_user: Dict[str, Any] = Depends(get_current_user)):
+async def update_task(task_id: str, payload: TaskUpdate, db: AsyncSession = Depends(get_db)):
     # Verify ownership through JOIN
-    stmt = select(Task).join(Project).where(Task.id == task_id, Project.user_id == current_user["user_id"])
+    stmt = select(Task).join(Project).where(Task.id == task_id)
     result = await db.execute(stmt)
     task = result.scalar_one_or_none()
     

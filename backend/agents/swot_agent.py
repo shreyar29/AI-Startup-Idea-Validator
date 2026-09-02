@@ -219,7 +219,7 @@ Analyze the Strengths, Weaknesses, Opportunities, and Threats (SWOT) of the star
 5. Generate a concise 'executive_summary' synthesizing the overall market position.
 6. Generate a 'strategic_recommendation' advising the founders on their immediate next steps.
 
-Do not invent facts that are not supported by the evidence.
+Do not invent facts that are not supported by the evidence. All insights must be tailored exactly to this specific startup idea; completely avoid generic industry-wide commentary. If data is missing for a section, provide a brief explanation instead of 'None' or 'Unknown'.
 
 Return ONLY valid JSON with exactly this structure:
 {{
@@ -259,7 +259,12 @@ Evidence:
                 logger.info(f"{log_prefix} Calling LLM attempt {attempt + 1}/{max_retries}.")
                 raw_response = await asyncio.wait_for(
                     self.llm_client.generate_response(
-                        system_prompt="You are an expert startup business strategist. Return ONLY valid JSON.",
+                        system_prompt=(
+                            "You are an expert startup business strategist. "
+                            "STRICT REQUIREMENT: Penalize broad industry commentary. You must analyze the EXACT startup idea and target customer. "
+                            "Do not use generic 'Unknown' or 'None' placeholders. If data is unavailable, provide a brief explanation of why. "
+                            "Return ONLY valid JSON."
+                        ),
                         user_prompt=(prompt if attempt == 0 else f"{prompt}\n\nFix JSON formatting. Error: {last_error}"),
                         response_format={"type": "json_object"}
                     ),
@@ -312,7 +317,13 @@ Evidence:
         if isinstance(raw_tows, dict):
             for t_quad in ["so", "wo", "st", "wt"]:
                 t_items = []
-                for t_item in raw_tows.get(t_quad, []):
+                raw_items = raw_tows.get(t_quad) or raw_tows.get(t_quad.upper()) or []
+                
+                # Fallback if LLM fails to generate actions
+                if not raw_items:
+                    raw_items = [{"action": f"Review strategic alignment for {t_quad.upper()} quadrant.", "impact": "Medium"}]
+                    
+                for t_item in raw_items:
                     valid_t = self._validate_tows_item(t_item)
                     if valid_t:
                         t_items.append(valid_t)

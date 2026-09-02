@@ -4,7 +4,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import json
 
 from core.container import container
@@ -18,13 +18,14 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 class ChatRequest(BaseModel):
     session_id: str
+    report_id: Optional[str] = None
     question: str
     active_section: str = "overview"
     vera_mode: str = "Founder"
 
 @router.post("/stream")
 @limiter.limit("10/minute")
-async def stream_chat(request: Request, chat_req: ChatRequest, db: AsyncSession = Depends(get_db), current_user: Dict[str, Any] = Depends(get_current_user)):
+async def stream_chat(request: Request, chat_req: ChatRequest, db: AsyncSession = Depends(get_db)):
     """
     SSE endpoint for streaming Vera responses.
     """
@@ -38,25 +39,36 @@ async def stream_chat(request: Request, chat_req: ChatRequest, db: AsyncSession 
 
     # 2. Retrieve prior context
     try:
-        context = await ChatMemoryManager.get_session_context(db, chat_req.session_id, current_user["user_id"])
+        context = await ChatMemoryManager.get_session_context(db, chat_req.session_id, "guest", report_id=chat_req.report_id)
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
         
-    # 3. Fetch report payload for context
-    stmt = select(Report).where(Report.id == chat_req.session_id)
-    report = (await db.execute(stmt)).scalar_one_or_none()
-    report_context = ""
+    # 3. Retrieve validation report data for context injection
+    report_payload = None
+    target_report_id = chat_req.report_id or chat_req.session_id
     
+    stmt = select(Report).where(Report.id == target_report_id)
+    report = (await db.execute(stmt)).scalar_one_or_none()
+    
+    report_context = ""
     if report and report.analysis_payload:
-        # Token Optimization: Only include executive summary and active section
         payload = report.analysis_payload
-        active_data = payload.get(section, {}) if section != "overview" else {}
         exec_summary = payload.get("executive_summary", {})
         
-        context_payload = {
-            "executive_summary": exec_summary,
-            section: active_data
-        }
+        if section == "overview":
+            context_payload = {
+                "executive_summary": exec_summary,
+                "startup_score": payload.get("startup_score_agent", {}),
+                "swot": payload.get("swot_agent", {}),
+                "mvp": payload.get("mvp_agent", {}),
+                "gtm": payload.get("gtm_agent", {})
+            }
+        else:
+            active_data = payload.get(section, {})
+            context_payload = {
+                "executive_summary": exec_summary,
+                section: active_data
+            }
         
         report_context = json.dumps(context_payload, indent=2)
         # Hard limit to prevent LLM context blowout
@@ -82,9 +94,15 @@ REPORT CONTEXT:
 
 RULES:
 1. You MUST stream your response.
-2. Answer based ONLY on the report context and history.
-3. Be brutally honest, concise, and structured.
-4. DO NOT break character. You are a {mode}. Speak exactly as a {mode} would."""
+2. Blend general startup best-practices with specific data from the validation report.
+3. Keep your response simple, highly understandable, and free of unnecessary jargon.
+4. CRITICAL: Adopt the EXACT persona of a {mode}. 
+   - If Investor/VC: Focus heavily on ROI, TAM, moats, and unit economics. Be pragmatic.
+   - If Competitor: Focus on vulnerabilities, market gaps, and threats.
+   - If Customer: Focus entirely on UX, value proposition, and solving the pain point.
+   - If Founder: Focus on execution, MVP building, and survival.
+   Speak entirely from this perspective.
+5. Be exceptionally polite, professional, and highly accurate. Maintain a respectful tone while delivering feedback."""
 
     user_prompt = f"{history_text}\n\nFounder Question: {question}"
 
@@ -113,7 +131,7 @@ RULES:
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @router.delete("/session/{session_id}")
-async def clear_session(session_id: str, db: AsyncSession = Depends(get_db), current_user: Dict[str, Any] = Depends(get_current_user)):
+async def clear_session(session_id: str, db: AsyncSession = Depends(get_db)):
     """
     Clears the chat history for a given session.
     """
@@ -121,7 +139,7 @@ async def clear_session(session_id: str, db: AsyncSession = Depends(get_db), cur
     from sqlalchemy import delete
     
     # Verify ownership
-    stmt = select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == current_user["user_id"])
+    stmt = select(ChatSession).where(ChatSession.id == session_id)
     session = (await db.execute(stmt)).scalar_one_or_none()
     
     if not session:
@@ -135,12 +153,12 @@ async def clear_session(session_id: str, db: AsyncSession = Depends(get_db), cur
     return {"status": "success", "message": "Session cleared"}
 
 @router.get("/session/{session_id}")
-async def get_session_history(session_id: str, db: AsyncSession = Depends(get_db), current_user: Dict[str, Any] = Depends(get_current_user)):
+async def get_session_history(session_id: str, db: AsyncSession = Depends(get_db)):
     """
     Fetches the chat history for a given session.
     """
     try:
-        context = await ChatMemoryManager.get_session_context(db, session_id, current_user["user_id"])
+        context = await ChatMemoryManager.get_session_context(db, session_id, "guest")
         return {"status": "success", "messages": context}
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))

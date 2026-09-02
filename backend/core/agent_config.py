@@ -63,7 +63,7 @@ AGENT_REGISTRY: Dict[str, AgentConfig] = {
     "risk": AgentConfig(
         name="Risk Agent",
         timeout=getattr(settings.orchestrator, "RISK_AGENT_TIMEOUT", getattr(settings.orchestrator, "COMPARISON_AGENT_TIMEOUT", 180)),
-        dependencies=["market", "customer", "competitor"],
+        dependencies=["web_search"],
         execution_order=50,
         agent_category="STRATEGY",
         weight=0.15,
@@ -72,7 +72,7 @@ AGENT_REGISTRY: Dict[str, AgentConfig] = {
     "swot": AgentConfig(
         name="SWOT Agent",
         timeout=getattr(settings.orchestrator, "SWOT_AGENT_TIMEOUT", getattr(settings.orchestrator, "COMPARISON_AGENT_TIMEOUT", 180)),
-        dependencies=["risk"],
+        dependencies=["web_search"],
         execution_order=60,
         agent_category="STRATEGY",
         weight=0.0,
@@ -80,7 +80,7 @@ AGENT_REGISTRY: Dict[str, AgentConfig] = {
     "mvp": AgentConfig(
         name="MVP Agent",
         timeout=getattr(settings.orchestrator, "MVP_AGENT_TIMEOUT", getattr(settings.orchestrator, "COMPARISON_AGENT_TIMEOUT", 180)),
-        dependencies=["swot"],
+        dependencies=["web_search"],
         execution_order=70,
         agent_category="STRATEGY",
         weight=0.15,
@@ -88,7 +88,7 @@ AGENT_REGISTRY: Dict[str, AgentConfig] = {
     "gtm": AgentConfig(
         name="GTM Agent",
         timeout=getattr(settings.orchestrator, "GTM_AGENT_TIMEOUT", getattr(settings.orchestrator, "COMPARISON_AGENT_TIMEOUT", 180)),
-        dependencies=["mvp"],
+        dependencies=["web_search"],
         execution_order=80,
         agent_category="STRATEGY",
         weight=0.15,

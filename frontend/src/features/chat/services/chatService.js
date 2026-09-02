@@ -8,7 +8,7 @@ export const chatService = {
     throw new Error('sendMessage is deprecated. Use streamMessage instead.');
   },
   
-  async streamMessage(sessionId, query, activeSection, veraMode, onChunk, onComplete, onError) {
+  async streamMessage(sessionId, reportId, query, activeSection, veraMode, onChunk, onComplete, onError) {
     try {
       // Get the token if we use authentication
       const token = localStorage.getItem('token');
@@ -21,6 +21,7 @@ export const chatService = {
         },
         body: JSON.stringify({
           session_id: sessionId,
+          report_id: reportId,
           question: query,
           active_section: activeSection || 'overview',
           vera_mode: veraMode || 'Founder'

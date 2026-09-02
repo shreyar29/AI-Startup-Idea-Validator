@@ -316,10 +316,41 @@ class StartupValidatorOrchestrator:
 
             final_data = self._apply_guardrails(request_id, shared_context, agent_outputs, correlation_id)
             
+            # --- PHASE 4: PRE-REPORT VALIDATION LAYER & QUALITY GATE ---
+            from guardrails.manager import QualityGate
+            max_regen_attempts = 1
+            for attempt in range(max_regen_attempts):
+                quality_report = QualityGate.evaluate_quality(final_data, startup_idea)
+                if quality_report["passed"] and not quality_report["weak_agents"]:
+                    break
+                    
+                weak_agents = quality_report["weak_agents"]
+                logger.warning(f"[{correlation_id}] Quality Gate flagged weak agents: {weak_agents}. Quality Score: {quality_report['quality_score']}. Regenerating...")
+                if request_id:
+                    self._safe_publish(request_id, "Quality Gate", "running", f"Regenerating weak sections: {', '.join(weak_agents)}")
+                    
+                regen_tasks = []
+                for agent_key in weak_agents:
+                    if agent_key in wrapped_peers:
+                        wrapped_peers[agent_key]._task = None  # Reset cached task
+                        regen_tasks.append(wrapped_peers[agent_key].get_analysis())
+                        
+                if regen_tasks:
+                    regen_results = await asyncio.gather(*regen_tasks, return_exceptions=True)
+                    for key, res in zip(weak_agents, regen_results):
+                        if not isinstance(res, Exception):
+                            agent_outputs[key] = res
+                            
+                    self._update_shared_context(shared_context, agent_outputs)
+                    final_data = self._apply_guardrails(request_id, shared_context, agent_outputs, correlation_id)
+            
+            # Re-evaluate final quality score to append to the report
+            final_quality = QualityGate.evaluate_quality(final_data, startup_idea)
+            
             overall_status = self._determine_status(metrics, correlation_id)
             
             final_report = self._build_final_response(
-                startup_idea, correlation_id, start_time, overall_status, metrics, agent_outputs, final_data, request_id
+                startup_idea, correlation_id, start_time, overall_status, metrics, agent_outputs, final_data, final_quality, request_id
             )
 
             return final_report
@@ -350,8 +381,8 @@ class StartupValidatorOrchestrator:
         query_strategist = QueryStrategist(llm_client=self.llm_client)
         raw_nodes = {
             "web_search": WebSearchAgent(query_strategist, self.search_service, self.result_processor, shared_context=shared_context),
-            "market": MarketOpportunityAgent(shared_context),
-            "customer": CustomerAgent(shared_context),
+            "market": MarketOpportunityAgent(shared_context, llm_client=self.llm_client),
+            "customer": CustomerAgent(shared_context, llm_client=self.llm_client),
             "competitor": CompetitorAgent(shared_context, llm_client=self.llm_client),
             "comparison": ComparisonAgent(shared_context, llm_client=self.llm_client),
             "risk": RiskAgent(shared_context, llm_client=self.llm_client),
@@ -497,7 +528,7 @@ class StartupValidatorOrchestrator:
         logger.info(f"[{correlation_id}] Final orchestration status: {overall_status}")
         return overall_status
 
-    def _build_final_response(self, startup_idea: str, correlation_id: str, start_time: float, status: str, metrics: dict, agent_outputs: dict, final_data: dict, request_id: str) -> dict:
+    def _build_final_response(self, startup_idea: str, correlation_id: str, start_time: float, status: str, metrics: dict, agent_outputs: dict, final_data: dict, final_quality: dict, request_id: str) -> dict:
         execution_time = time.time() - start_time
         
         raw_response = {
@@ -529,6 +560,7 @@ class StartupValidatorOrchestrator:
                 "gtm": final_data.get("gtm", {}),
                 "startup_score": final_data.get("startup_score", {}),
             },
+            "report_quality": final_quality
         }
 
         final_report = GuardrailManager.verify_final_response(raw_response)

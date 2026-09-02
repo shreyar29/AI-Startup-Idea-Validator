@@ -1,4 +1,5 @@
 import React from 'react';
+import AgentScoreBadge from './dashboard/AgentScoreBadge';
 import { motion } from 'framer-motion';
 import { Rocket, Megaphone, Users, Target, CheckCircle2, DollarSign, Activity, TrendingUp } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, Tooltip as RechartsTooltip } from 'recharts';
@@ -33,6 +34,7 @@ const GTMSection = ({ data }) => {
         </div>
         <div>
           <h2 className="text-2xl font-bold text-textMain tracking-tight">Go-To-Market Strategy</h2>
+          <AgentScoreBadge score={data.go_to_market_score} confidence={data.confidence_level} />
         </div>
         {data.go_to_market_score && (
           <div className="ml-auto px-4 py-1.5 rounded-full bg-surface border border-border/50 text-sm font-semibold flex items-center gap-2 shadow-sm">

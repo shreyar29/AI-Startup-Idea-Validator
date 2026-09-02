@@ -181,7 +181,7 @@ class GTMAgent:
 
         prompt = f"""
 Analyze the provided intelligence and generate a Go-To-Market (GTM) strategy for the MVP.
-All recommendations must cite specific evidence from the payload.
+All recommendations must cite specific evidence from the payload and MUST be tailored exactly to the specific startup idea. Avoid generic industry-wide marketing advice. If you lack evidence for a field, explain why instead of using "Unknown" or "None".
 
 Return ONLY valid JSON with exactly this structure. Keep all descriptions concise (max 2 sentences). Limit all arrays to a maximum of 3 items. Ensure the JSON is completely formed and properly closed before finishing:
 {{
@@ -217,7 +217,12 @@ Evidence Payload:
                 logger.info(f"{log_prefix} Calling LLM attempt {attempt + 1}/{max_retries}.")
                 raw_response = await asyncio.wait_for(
                     self.llm_client.generate_response(
-                        system_prompt="You are an expert startup growth marketer. Return ONLY valid JSON.",
+                        system_prompt=(
+                            "You are an expert startup growth marketer. "
+                            "STRICT REQUIREMENT: Penalize broad industry commentary. You must analyze the EXACT startup idea and target customer. "
+                            "Do not use generic 'Unknown' or 'None' placeholders. If data is unavailable, provide a brief explanation of why. "
+                            "Return ONLY valid JSON."
+                        ),
                         user_prompt=(prompt if attempt == 0 else f"{prompt}\n\nFix JSON formatting. Error: {last_error}"),
                         response_format={"type": "json_object"}
                     ),

@@ -1,133 +1,126 @@
-# VentureLens — Development of AI Based Startup Idea Validator with Market Analysis Assistance
+<div align="center">
+  <img src="https://img.icons8.com/3d-fluency/94/startup.png" alt="Startup Icon"/>
+  <h1>🚀 VentureLens</h1>
+  <p><b>The Ultimate AI-Powered Startup Intelligence & Due-Diligence Engine</b></p>
+  
+  [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+  [![React](https://img.shields.io/badge/Frontend-React%2018-61DAFB?logo=react&logoColor=black)](#)
+  [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi&logoColor=white)](#)
+  [![AI Agents](https://img.shields.io/badge/Architecture-P2P%20Agent%20Mesh-8A2BE2)](#)
+</div>
 
-A production-ready, multi-agent AI system that validates startup ideas by performing live web research and synthesizing comprehensive market, competitor, and customer intelligence via a decentralized mesh network.
+<br/>
 
-## Project Overview
-VentureLens is an advanced AI-powered platform designed to provide founders, investors, and product managers with deep, data-driven insights into any startup idea. By leveraging a Multi-Agent System (MAS), it dynamically searches the web, analyzes the market size, evaluates customer pain points, and dissects competitors to generate a final Executive Strategy Report.
+VentureLens transforms raw, napkin-sketch startup ideas into **comprehensive, investor-ready due-diligence reports** in seconds. Powered by a decentralized network of specialized AI agents, it doesn't just guess—it researches, analyzes, and strategizes.
 
-## Features Implemented
-- **Decentralized Agent-to-Agent (A2A) Mesh Network**: Downstream agents execute in parallel, sharing a unified web research cache to optimize API usage and latency.
-- **Query Strategist**: Dynamically converts abstract startup ideas into 6 targeted search queries.
-- **Concurrent Web Search**: Harnesses `httpx.AsyncClient` and Tavily Search API for rapid, simultaneous deep-web extraction.
-- **LLM Provider Agnostic**: Seamlessly switches between OpenRouter and Google Gemini via `pydantic-settings` configuration.
-- **Robust Guardrails**: Real-time evaluation of LLM outputs using semantic matching, JSON schema enforcement, and `json-repair` to prevent hallucinations.
-- **Server-Sent Events (SSE)**: Streams real-time validation progress logs directly to the frontend.
-- **Executive-Ready UI**: A premium, responsive React dashboard utilizing Glassmorphism, Framer Motion animations, and data-rich visualization cards.
+Instead of generic ChatGPT advice, VentureLens executes real-time web searches, extracts structured market data, and orchestrates **8 specialized AI agents** (Market, Customer, Competitor, Risk, etc.) to evaluate your business model ruthlessly.
 
-## Current Architecture
-The system operates on a decentralized pipeline:
+---
+
+## ✨ Why VentureLens?
+
+- **🕸️ P2P Agent Mesh Architecture**: 8 specialized AI agents work in parallel to analyze your idea from every angle. No monolithic bottlenecks.
+- **🔎 Evidence-Backed Intelligence**: Integrates with Tavily to scrape real-time market data. All insights are grounded in reality—*zero hallucinations*.
+- **🧮 Dynamic Scoring Engine**: Calculates a holistic `0-100` viability score weighted dynamically based on your industry (e.g., DeepTech vs B2B SaaS).
+- **🤖 Vera: Your AI Co-Founder**: An interactive chat interface powered by a custom **RAG (Retrieval-Augmented Generation)** pipeline. Interrogate your generated report in real-time!
+- **📊 Export to PDF & PPTX**: Instantly generate professional pitch decks and executive summaries for investors.
+- **🎨 Premium UI/UX**: Built with React, TailwindCSS, Recharts, and Framer Motion for a stunning, glassmorphic dark-mode experience.
+
+---
+
+## 🏗 System Architecture
+
+VentureLens operates on a decoupled client-server architecture:
+
+- **Frontend**: React (Vite), TailwindCSS, Framer Motion, Context API.
+- **Backend**: FastAPI, AsyncIO, SQLAlchemy, SQLite (via Alembic).
+- **AI Core**: OpenRouter (LLM Routing), Tavily (Search), Qdrant (RAG Vector Store).
+
+### 🧠 How the Agent Mesh Works:
+1. **Phase 1 (Data Gathering)**: Web Search Agent aggregates real-world data.
+2. **Phase 2 (Analysis)**: Market, Customer, and Competitor Agents run in parallel to extract structured contracts (JSON).
+3. **Phase 3 (Synthesis)**: SWOT, MVP, GTM, and Risk Agents consume Phase 2 data to generate strategic roadmaps.
+4. **Phase 4 (Scoring)**: The Scoring Engine weighs all metrics and calculates the final validation score.
+
+*(For detailed architectural diagrams, check out `docs/architecture.md`)*
+
+---
+
+## 📁 Project Structure
+
 ```text
-User Input → FastAPI → Orchestrator
-                            ├── WebSearchAgent (Tavily + Gemini/OpenRouter)
-                            │     └── Executes deep web research & caches it
-                            ├── MarketOpportunityAgent (Market Sizing & Trends)
-                            ├── CustomerAgent (Personas & Pain Points)
-                            ├── CompetitorAgent (Feature Gap Analysis)
-                            └── ComparisonAgent (Master Synthesis Node)
-                                  └── Dynamic Strategy, Feature Matrix → JSON response
+VentureLens/
+├── backend/
+│   ├── agents/          # Specialized LLM Agents (Market, Competitor, etc.)
+│   ├── api/             # FastAPI Routes (Validation, Chat, Export)
+│   ├── contracts/       # Pydantic Schemas for Agent Output Validation
+│   ├── crew/            # Orchestrator (Mesh Network Controller)
+│   ├── database/        # SQLAlchemy Models & SQLite Session
+│   ├── guardrails/      # Hallucination & Data Sanitization Managers
+│   └── app.py           # FastAPI Entry Point
+├── frontend/
+│   ├── src/
+│   │   ├── components/  # React UI Components (Report Sections, Charts)
+│   │   ├── pages/       # Route Views (Dashboard, Workspace, Home)
+│   │   └── App.jsx      # React Router
+├── docs/                # Comprehensive System Documentation
+└── .env                 # Environment Configuration
 ```
 
-## Tech Stack
-| Layer | Technology |
-|-------|-----------|
-| **Frontend** | React 19, Vite, Tailwind CSS, Framer Motion, Recharts, React Router v7 |
-| **Backend** | FastAPI, Python 3.12, Uvicorn, Pydantic, httpx |
-| **LLM Integrations**| Google Gemini (via `google-genai`), OpenRouter |
-| **Search Engine**| Tavily Search API, DuckDuckGo (Fallback) |
+---
 
-## Installation & Setup
+## 🚀 Quick Start Guide
 
-### Prerequisites
-- Node.js v18+
-- Python 3.10+
-- Tavily API key
-- Google Gemini API key or OpenRouter API key
+### 1. Clone the repository
+```bash
+git clone https://github.com/your-username/VentureLens.git
+cd VentureLens
+```
 
-### 1. Configure Environment Variables
-Create a `.env` file in the project root (or use the existing one):
+### 2. Environment Setup
+Create a `.env` file in the root directory:
 ```env
-# Search Provider
+OPENROUTER_API_KEY=your_openrouter_key
 TAVILY_API_KEY=your_tavily_key
-
-# Google Gemini (Default)
-LLM_PROVIDER=gemini
-GOOGLE_AI_API_KEY=your_gemini_key
-GOOGLE_MODEL=gemini-3.5-flash
-
-# OpenRouter (Optional)
-# OPENROUTER_API_KEY=your_openrouter_key
-# OPENROUTER_MODEL=openai/gpt-oss-20b:free
-# OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+SECRET_KEY=your_secure_random_string
 ```
 
-### 2. Start the Backend
+### 3. Backend Setup
 ```bash
 cd backend
-pip install -r requirements.txt
-python -m uvicorn app:app --host 127.0.0.1 --port 8000 --reload
+python -m venv venv
+source venv/bin/activate  # (Windows: venv\Scripts\activate)
+pip install -r ../requirements.txt
+python -m uvicorn app:app --reload
 ```
-Backend runs at: `http://127.0.0.1:8000` (API Docs: `http://127.0.0.1:8000/docs`)
 
-### 3. Start the Frontend
+### 4. Frontend Setup
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-Frontend runs at: `http://localhost:5173`
 
-### 4. Running All Services Together
-You can run both servers concurrently in separate terminal windows, or use a process manager like `concurrently` (if installed globally):
-```bash
-npx concurrently "cd backend && python -m uvicorn app:app --port 8000" "cd frontend && npm run dev"
-```
+🎯 **Visit `http://localhost:5173` and launch your startup!**
 
-## Folder Structure
-```text
-/
-├── backend/
-│   ├── agents/          # Individual AI agents (Market, Customer, Competitor, Comparison)
-│   ├── core/            # Configuration and dependencies
-│   ├── crew/            # Orchestrator for managing A2A mesh network
-│   ├── guardrails/      # Output validation and hallucination prevention
-│   ├── llm/             # Gemini and OpenRouter client adapters
-│   ├── providers/       # LLM provider abstractions
-│   ├── routes/          # FastAPI routers (Search, Progress, History)
-│   ├── services/        # External services (Tavily Search)
-│   ├── strategy/        # Query strategist for generating search intents
-│   └── utils/           # Logging, error handling, SSE progress manager
-├── frontend/
-│   ├── public/          # Static assets
-│   ├── src/
-│   │   ├── components/  # Reusable React components & Dashboard Sections
-│   │   ├── pages/       # Route pages (Home, Dashboard, Contact)
-│   │   ├── services/    # API integration & SSE hooks
-│   │   ├── styles/      # Tailwind & global CSS
-│   │   └── App.jsx      # React Router configuration
-├── docs/                # Comprehensive system and agent documentation
-├── .env                 # Environment variables
-└── README.md
-```
+---
 
-## API Overview
-- `GET /search?query={idea}`: Triggers the multi-agent pipeline. Returns the `X-Request-ID` header.
-- `GET /api/progress/stream?request_id={id}`: SSE endpoint streaming real-time execution logs.
-- `GET /api/history`: Retrieves previously validated startup ideas.
+## 📖 Comprehensive Documentation
 
-## Future Improvements
-- Implement persistent database storage (PostgreSQL) for user histories.
-- Expand web search capabilities with PDF/Document parsing.
-- Introduce continuous real-time scraping via Headless Browsers.
-- Add user authentication via OAuth2/JWT.
+To dive deeper into the technical implementation, explore the `docs/` folder:
+- 🏗️ [System Architecture](docs/architecture.md)
+- 🔄 [System Workflows](docs/system-workflow.md)
+- 🤖 [Agent Implementation](docs/agents/agents-documentation.md)
+- ⚙️ [Backend Structure](docs/backend/backend-documentation.md)
+- 🎨 [Frontend Structure](docs/frontend/frontend-documentation.md)
+- 🗄️ [Database Schema](docs/database/database-documentation.md)
+- 🚀 [Deployment Guide](docs/deployment/deployment-guide.md)
 
-## Troubleshooting
-- **Backend crashes with `ModuleNotFoundError`**: Ensure you are in the active virtual environment and have run `pip install -r requirements.txt`.
-- **Progress bar gets stuck**: Verify that your browser permits SSE (Server-Sent Events) and that the backend is not throwing a CORS error. Ensure `X-Request-ID` is correctly generated on the frontend and passed in the headers.
-- **LLM Timeouts / Rate Limits**: Increase the timeout settings in `.env` (e.g., `GEMINI_TIMEOUT=120`) and decrease `GEMINI_CONCURRENCY` to 1 if using a free tier API key.
+---
 
-## Contribution Guidelines
-1. Fork the repository.
-2. Create a feature branch (`git checkout -b feature/amazing-feature`).
-3. Commit your changes (`git commit -m 'Add amazing feature'`).
-4. Push to the branch (`git push origin feature/amazing-feature`).
-5. Open a Pull Request.
+## 🔮 Future Roadmap
+
+- [ ] **PostgreSQL Migration**: Move from SQLite for robust horizontal scalability.
+- [ ] **Multi-Tenant Workspaces**: Implement JWT auth for collaborative team environments.
+- [ ] **Custom Document RAG**: Upload your own PDFs and market research to feed into the initial context.
+- [ ] **Native Editor**: Allow Vera to dynamically edit and update the JSON report based on your chat feedback.

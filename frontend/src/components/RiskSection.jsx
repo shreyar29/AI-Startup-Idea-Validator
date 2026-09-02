@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import AgentScoreBadge from './dashboard/AgentScoreBadge';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, TrendingDown, Target, Zap, Server, Shield, CheckCircle2, Activity, Info } from 'lucide-react';
 import { 
@@ -44,6 +45,7 @@ const RiskSection = ({ data }) => {
         </div>
         <div>
           <h2 className="text-2xl font-bold text-textMain tracking-tight">Risk Center</h2>
+          <AgentScoreBadge score={data.overall_risk_score} confidence={data.confidence_level} inverted={true} />
         </div>
         {data.overall_risk_level && (
           <div className="ml-auto px-4 py-1.5 rounded-full bg-surface border border-border/50 text-sm font-semibold flex items-center gap-2 shadow-sm">
