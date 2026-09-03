@@ -38,7 +38,7 @@ Base = declarative_base()
 async def init_db():
     """Create all tables in the database if they don't exist."""
     try:
-        from database.models import User, SearchHistory, StartupScorecard  # Ensure models are imported
+        import database.models  # Ensure all models are registered with Base.metadata
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("Database tables initialized successfully.")
