@@ -9,5 +9,8 @@ echo "Building frontend..."
 cd frontend
 npm install
 npm run build
+echo "Running database migrations..."
+cd ../backend
+alembic upgrade head
 
 echo "Build complete."
