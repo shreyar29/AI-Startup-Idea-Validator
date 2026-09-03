@@ -54,17 +54,6 @@ async def lifespan(app: FastAPI):
     # Startup actions
     logger.info(f"Starting VentureLens API v{API_VERSION}...")
     
-    try:
-        import subprocess
-        logger.info("Running database migrations at startup...")
-        result = subprocess.run(["alembic", "upgrade", "head"], capture_output=True, text=True, check=True)
-        logger.info(f"Database migrations completed: {result.stdout}")
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Database migration failed: {e.stderr}")
-        raise RuntimeError(f"Database migration failed: {e.stderr}") from e
-    except Exception as e:
-        logger.error(f"Unexpected error during migrations: {str(e)}")
-        raise RuntimeError(f"Unexpected error during migrations: {str(e)}") from e
         
     # Fail fast: Validate critical dependencies at startup
     try:
