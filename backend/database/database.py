@@ -35,6 +35,16 @@ AsyncSessionLocal = async_sessionmaker(
 
 Base = declarative_base()
 
+async def init_db():
+    """Create all tables in the database if they don't exist."""
+    try:
+        from database.models import User, SearchHistory, StartupScorecard  # Ensure models are imported
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database tables initialized successfully.")
+    except Exception as e:
+        logger.error(f"Failed to initialize database tables: {str(e)}")
+
 async def get_db():
     try:
         async with AsyncSessionLocal() as session:

@@ -16,6 +16,7 @@ import asyncio
 import os
 import uuid
 import time
+import logging
 from typing import Callable
 from contextlib import asynccontextmanager
 
@@ -54,6 +55,9 @@ async def lifespan(app: FastAPI):
     # Startup actions
     logger.info(f"Starting VentureLens API v{API_VERSION}...")
     
+    # Initialize database
+    from database.database import init_db
+    await init_db()
         
     # Fail fast: Validate critical dependencies at startup
     try:
