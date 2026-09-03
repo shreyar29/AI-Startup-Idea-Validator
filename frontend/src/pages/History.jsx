@@ -20,7 +20,7 @@ const History = () => {
       }
 
       try {
-        const response = await axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/reports`, {
+        const response = await axios.get(`${import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:8000')}/api/reports`, {
           headers: {
             Authorization: `Bearer ${token}`
           }
